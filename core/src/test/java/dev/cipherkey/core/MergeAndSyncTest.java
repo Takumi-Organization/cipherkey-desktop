@@ -214,4 +214,44 @@ class MergeAndSyncTest {
         sync(mobile, mT);
         assertEquals(450, mobile.live().size());
     }
+
+    @Test
+    void lockedVaultSpoolPushesAndPullsWithoutAnyDecryptionKey() throws Exception {
+        Record r = add(desktop, "desktop", "Server", "1");
+        sync(desktop, dT);
+        sync(mobile, mT);
+        // el móvil edita y se bloquea con la edición pendiente
+        edit(mobile, "mobile", mobile.live().get(0), x -> x.password = "2");
+        // el escritorio también cambia otra cosa distinta mientras tanto
+        Record other = add(desktop, "desktop", "Otro", "x");
+        sync(desktop, dT);
+
+        dev.cipherkey.core.sync.Spool spool = new dev.cipherkey.core.sync.Spool();
+        new SyncEngine(mobile, mT, clock::incrementAndGet).exportTo(spool);
+        spool = dev.cipherkey.core.sync.Spool.fromJson(spool.toJson()); // sobrevive a disco
+        spool.run(mT);                                                   // sin tocar la bóveda ni claves
+        assertFalse(spool.toJson().contains("\"2\""), "el spool no contiene texto claro");
+
+        int n = new SyncEngine(mobile, mT, clock::incrementAndGet).integrate(spool);
+        assertTrue(n >= 2);
+        assertTrue(mobile.sync.pending.isEmpty(), "la edición quedó confirmada");
+        assertEquals(2, mobile.live().size(), "llegó el registro nuevo del escritorio");
+        sync(desktop, dT);
+        assertEquals("2", desktop.find(r.uuid).get().password, "el cambio del móvil llegó sin desbloquear la bóveda");
+    }
+
+    @Test
+    void spoolConflictIsSurfacedOnUnlock() throws Exception {
+        Record r = add(desktop, "desktop", "Svc", "p");
+        sync(desktop, dT); sync(mobile, mT);
+        edit(desktop, "desktop", r, x -> x.password = "pc");
+        edit(mobile, "mobile", mobile.live().get(0), x -> x.password = "movil");
+        sync(desktop, dT);
+        var spool = new dev.cipherkey.core.sync.Spool();
+        new SyncEngine(mobile, mT, clock::incrementAndGet).exportTo(spool);
+        spool.run(mT);
+        new SyncEngine(mobile, mT, clock::incrementAndGet).integrate(spool);
+        assertEquals("pc", mobile.live().get(0).conflict.password);
+        assertEquals("movil", mobile.live().get(0).password);
+    }
 }

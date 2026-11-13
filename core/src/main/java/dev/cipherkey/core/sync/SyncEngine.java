@@ -107,20 +107,76 @@ public final class SyncEngine {
 
     private record PushOutcome(int pushed, int rejected, boolean retry) {}
 
-    private PushOutcome pushPending() throws IOException, GeneralSecurityException {
+    /** Operaciones pendientes ya selladas (cifradas), listas para que las envíe alguien sin la clave de bóveda. */
+    public List<PushOp> sealPending() throws GeneralSecurityException {
+        return buildOps(new HashMap<>());
+    }
+
+    /**
+     * Integra lo que hizo {@link Spool#run} mientras la bóveda estaba bloqueada: confirmaciones de envío y cambios remotos
+     * (incluidas las versiones actuales devueltas en conflictos). Después hay que llamar a {@link #sync()} si se quiere.
+     */
+    public int integrate(Spool spool) throws GeneralSecurityException {
+        SyncState st = doc.sync;
+        Map<String, Record> sent = new HashMap<>();
+        buildOps(sent); // reconstruye los opId actuales para casar confirmaciones con ediciones vigentes
+        int n = 0;
+        for (PushResult res : spool.results) {
+            if (!"ok".equals(res.status())) continue;
+            Spool.Sent s = spool.sentById.get(res.opId());
+            if (s == null) continue;
+            Record snapshot = Envelope.open(syncKey, doc.vaultId, s.uuid(), s.blob());
+            SyncState.Baseline known = st.baselines.get(s.uuid());
+            if (known == null || known.ver() < res.ver()) st.baselines.put(s.uuid(), new SyncState.Baseline(res.ver(), snapshot));
+            Optional<Record> cur = doc.find(s.uuid());
+            if (cur.isPresent() && cur.get().rev == snapshot.rev) st.pending.remove(s.uuid());
+            n++;
+        }
+        List<Change> inbox = new ArrayList<>(spool.inbox);
+        inbox.sort(Comparator.comparingLong(Change::seq));
+        for (Change c : inbox) {
+            apply(c);
+            st.lastSeq = Math.max(st.lastSeq, c.seq());
+            n++;
+        }
+        st.lastSeq = Math.max(st.lastSeq, spool.cursor);
+        spool.inbox.clear();
+        spool.results.clear();
+        spool.outbox.clear();
+        spool.sentById.clear();
+        return n;
+    }
+
+    /** Vuelca al spool el estado necesario para sincronizar sin la clave de bóveda (al bloquear). */
+    public void exportTo(Spool spool) throws GeneralSecurityException {
+        spool.cursor = doc.sync.lastSeq;
+        spool.outbox = new ArrayList<>(sealPending());
+        spool.inbox.clear();
+        spool.results.clear();
+        spool.sentById.clear();
+        for (PushOp op : spool.outbox) spool.sentById.put(op.opId(), new Spool.Sent(op.uuid(), op.blob()));
+    }
+
+    private List<PushOp> buildOps(Map<String, Record> sent) throws GeneralSecurityException {
         SyncState st = doc.sync;
         List<PushOp> ops = new ArrayList<>();
-        Map<String, Record> sent = new HashMap<>();
         for (String uuid : new ArrayList<>(st.pending.keySet())) {
             Optional<Record> r = doc.find(uuid);
             if (r.isEmpty() || r.get().conflict != null) { st.pending.remove(uuid); continue; }
             Record rec = r.get();
             SyncState.Baseline b = st.baselines.get(uuid);
             long baseVer = b == null ? 0 : b.ver();
-            String opId = uuid + ":" + rec.rev + ":" + baseVer;
+            String opId = deviceId + ":" + uuid + ":" + rec.rev + ":" + baseVer;
             ops.add(new PushOp(opId, uuid, baseVer, rec.deleted, Envelope.seal(syncKey, doc.vaultId, rec)));
             sent.put(opId, rec.copy());
         }
+        return ops;
+    }
+
+    private PushOutcome pushPending() throws IOException, GeneralSecurityException {
+        SyncState st = doc.sync;
+        Map<String, Record> sent = new HashMap<>();
+        List<PushOp> ops = buildOps(sent);
         if (ops.isEmpty()) return new PushOutcome(0, 0, false);
         int pushed = 0, rejected = 0;
         boolean retry = false;

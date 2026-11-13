@@ -90,6 +90,19 @@ public final class VaultContainer {
         }
     }
 
+    /** Abre con la clave ya derivada (desbloqueo biométrico). Si la clave no corresponde lanza {@link WrongPasswordException}. */
+    public static Opened openWithKey(byte[] content, byte[] key) throws FormatException, WrongPasswordException, GeneralSecurityException {
+        int version = peekVersion(content);
+        if (version != VERSION_2 && version != VERSION_3) throw new FormatException("Versión de bóveda no soportada: " + version);
+        byte[] header = Arrays.copyOfRange(content, 0, HEADER_LENGTH);
+        try {
+            byte[] plaintext = VaultCrypto.decrypt(key, header, Arrays.copyOfRange(content, HEADER_LENGTH, content.length));
+            return new Opened(version, header, key.clone(), plaintext);
+        } catch (AEADBadTagException e) {
+            throw new WrongPasswordException(e);
+        }
+    }
+
     /** Cabecera + nonce + cifrado. */
     public static byte[] seal(byte[] header, byte[] key, byte[] plaintext) throws GeneralSecurityException {
         byte[] body = VaultCrypto.encrypt(key, header, plaintext);
