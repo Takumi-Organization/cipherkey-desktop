@@ -1,6 +1,6 @@
 package dev.persistence;
 
-import dev.security.VaultCrypto;
+import dev.cipherkey.core.crypto.VaultCrypto;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

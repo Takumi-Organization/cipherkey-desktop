@@ -12,6 +12,7 @@ import java.util.Objects;
  */
 public class PasswordEntry {
     private int id;
+    private String uuid = java.util.UUID.randomUUID().toString();
     private String title;
     private String username;
     private String password;
@@ -59,6 +60,15 @@ public class PasswordEntry {
 
     public void setId(int id) {
         this.id = id;
+    }
+
+    /** Identificador estable entre dispositivos; {@code id} es solo un manejador local de la sesión. */
+    public String getUuid() {
+        return uuid;
+    }
+
+    public void setUuid(String uuid) {
+        this.uuid = uuid;
     }
 
     public String getTitle() {

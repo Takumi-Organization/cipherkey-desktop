@@ -1,7 +1,10 @@
-package dev.security;
+package dev.cipherkey.core.crypto;
 
+import org.bouncycastle.crypto.digests.SHA256Digest;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
+import org.bouncycastle.crypto.generators.HKDFBytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
+import org.bouncycastle.crypto.params.HKDFParameters;
 
 import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
@@ -11,28 +14,23 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
-/**
- * Primitivas criptográficas de la bóveda: Argon2id para derivar la clave y AES-256-GCM para cifrar.
- * No modifica los arrays que recibe; quien los aporta es responsable de borrarlos.
- */
+/** Primitivas: Argon2id (derivación), AES-256-GCM (cifrado autenticado), HKDF-SHA256 y SHA-256. No modifica los arrays recibidos. */
 public final class VaultCrypto {
     public static final int KEY_LENGTH = 32;
     public static final int SALT_LENGTH = 32;
     public static final int NONCE_LENGTH = 12;
     private static final int GCM_TAG_BITS = 128;
-
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private VaultCrypto() {}
 
-    /** Parámetros de Argon2id. Se guardan en la cabecera del fichero para poder subirlos en el futuro. */
+    /** Parámetros de Argon2id; se guardan en la cabecera del fichero. */
     public record KdfParams(int memoryKiB, int iterations, int parallelism) {
         public static final KdfParams DEFAULT = new KdfParams(64 * 1024, 3, 1);
-
-        // Topes para que un fichero manipulado no pueda forzar un consumo de memoria/CPU absurdo.
         private static final int MAX_MEMORY_KIB = 1024 * 1024;
         private static final int MAX_ITERATIONS = 20;
         private static final int MAX_PARALLELISM = 16;
@@ -50,7 +48,6 @@ public final class VaultCrypto {
         return bytes;
     }
 
-    /** Deriva una clave de 32 bytes. El llamador debe poner a cero el resultado cuando termine. */
     public static byte[] deriveKey(char[] password, byte[] salt, KdfParams params) {
         byte[] pwdBytes = toUtf8(password);
         try {
@@ -71,7 +68,7 @@ public final class VaultCrypto {
         }
     }
 
-    /** Cifra con AES-256-GCM. {@code aad} queda autenticado pero no cifrado. Devuelve nonce + texto cifrado. */
+    /** Devuelve nonce(12) + texto cifrado + tag. */
     public static byte[] encrypt(byte[] key, byte[] aad, byte[] plaintext) throws GeneralSecurityException {
         byte[] nonce = randomBytes(NONCE_LENGTH);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -81,11 +78,6 @@ public final class VaultCrypto {
         return ByteBuffer.allocate(NONCE_LENGTH + ciphertext.length).put(nonce).put(ciphertext).array();
     }
 
-    /**
-     * Descifra lo producido por {@link #encrypt}.
-     *
-     * @throws AEADBadTagException si la clave es incorrecta o los datos/cabecera fueron alterados
-     */
     public static byte[] decrypt(byte[] key, byte[] aad, byte[] nonceAndCiphertext) throws GeneralSecurityException {
         if (nonceAndCiphertext.length < NONCE_LENGTH + GCM_TAG_BITS / 8) {
             throw new AEADBadTagException("Datos cifrados demasiado cortos");
@@ -95,6 +87,23 @@ public final class VaultCrypto {
         cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"), new GCMParameterSpec(GCM_TAG_BITS, nonce));
         cipher.updateAAD(aad);
         return cipher.doFinal(nonceAndCiphertext, NONCE_LENGTH, nonceAndCiphertext.length - NONCE_LENGTH);
+    }
+
+    /** HKDF-SHA256 de 32 bytes. */
+    public static byte[] hkdf(byte[] ikm, String info) {
+        HKDFBytesGenerator g = new HKDFBytesGenerator(new SHA256Digest());
+        g.init(new HKDFParameters(ikm, null, info.getBytes(StandardCharsets.UTF_8)));
+        byte[] out = new byte[KEY_LENGTH];
+        g.generateBytes(out, 0, out.length);
+        return out;
+    }
+
+    public static byte[] sha256(byte[] data) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(data);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static byte[] toUtf8(char[] chars) {
