@@ -183,7 +183,7 @@ public class PasswordManager {
     /** Registros con conflicto pendiente (copias; para resolver, usar {@link #withDocument}). */
     public synchronized List<Record> conflicts() {
         if (doc == null) return List.of();
-        return doc.records.stream().filter(r -> r.conflict != null && !r.deleted || r.conflict != null).map(Record::copy).toList();
+        return doc.records.stream().filter(r -> r.conflict != null).map(Record::copy).toList();
     }
 
     public synchronized int pendingCount() {

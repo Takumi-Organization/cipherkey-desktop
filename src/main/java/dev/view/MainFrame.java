@@ -40,6 +40,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     private final JPanel cardPanel = new JPanel(cards);
     private final JButton themeButton;
     private final InactivityListener inactivityListener;
+    private final dev.sync.SyncService syncService;
 
     private Predicate<PasswordEntry> viewFilter = e -> true;
 
@@ -47,6 +48,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         super("CipherKey");
         this.manager = manager;
         setIconImage(Icons.appIcon());
+        syncService = new dev.sync.SyncService(manager);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override
@@ -93,6 +95,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
                 AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
 
         sidebar.refresh(manager.getEntries());
+        syncService.start(st -> SwingUtilities.invokeLater(() -> onSyncStatus(st)));
         setMinimumSize(new Dimension(940, 580));
         Dimension saved = AppPrefs.windowSize();
         setSize(saved != null ? saved : new Dimension(1200, 740));
@@ -163,6 +166,8 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         exportItem.addActionListener(e -> exportCsv());
         JMenuItem backupItem = new JMenuItem("Copia de seguridad…", Icons.get("save"));
         backupItem.addActionListener(e -> backupVault());
+        JMenuItem syncItem = new JMenuItem("Sincronización…", Icons.get("refresh"));
+        syncItem.addActionListener(e -> openSync());
         JMenuItem auditItem = new JMenuItem("Auditoría de seguridad", Icons.get("shield"));
         auditItem.addActionListener(e -> openAudit());
         JMenuItem about = new JMenuItem("Acerca de CipherKey", Icons.get("info"));
@@ -173,6 +178,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         exit.addActionListener(e -> shutdown());
         menu.add(settings);
         menu.add(auditItem);
+        menu.add(syncItem);
         menu.addSeparator();
         menu.add(importItem);
         menu.add(exportItem);
@@ -491,9 +497,9 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
             // el destino aún no existe: no es el mismo archivo
         }
         try {
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-            Toast.show(this, "Copia guardada (sigue cifrada con tu clave)");
-        } catch (IOException ex) {
+            manager.exportEncryptedCopy(target);
+            Toast.show(this, "Copia guardada (cifrada con tu clave, sin la identidad de sincronización)");
+        } catch (VaultException ex) {
             JOptionPane.showMessageDialog(this, "No se pudo copiar: " + ex.getMessage(), "Copia de seguridad", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -531,6 +537,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     private boolean save() {
         try {
             manager.saveData();
+            syncService.syncSoon();
             return true;
         } catch (VaultException ex) {
             JOptionPane.showMessageDialog(this, "No se pudo guardar: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -538,7 +545,19 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         }
     }
 
+    private void openSync() {
+        new SyncDialog(this, syncService, () -> refresh(null)).setVisible(true);
+    }
+
+    /** Tras cada sincronización: si cambiaron los datos, se refresca la lista conservando la selección. */
+    private void onSyncStatus(dev.sync.SyncService.Status st) {
+        if (st.running()) return;
+        Integer sel = table.selectedEntry() == null ? null : table.selectedEntry().getId();
+        refresh(sel);
+    }
+
     private void lock() {
+        syncService.stop();
         Toolkit.getDefaultToolkit().removeAWTEventListener(inactivityListener);
         saveWindowState();
         manager.lock();
@@ -547,6 +566,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     }
 
     private void shutdown() {
+        syncService.stop();
         saveWindowState();
         manager.lock();
         System.exit(0);
