@@ -129,6 +129,7 @@ public final class PeerSync {
         doc.run(d -> {
             SyncState st = d.sync;
             SyncState.Peer ps = st.peers.get(peer.deviceId());
+            if (ps == null) throw new PeerAuthException("El dispositivo se desvinculó durante la sincronización");
             long now = clock.getAsLong();
             for (JsonElement el : theirRecords.json.getAsJsonArray("r")) {
                 Record remote = Record.fromJson(el.getAsJsonObject());

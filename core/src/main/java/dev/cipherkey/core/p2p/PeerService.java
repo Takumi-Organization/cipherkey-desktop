@@ -23,6 +23,7 @@ public final class PeerService implements Closeable {
     private static final long BEACON_EVERY_MS = 4000;
     private static final long NEARBY_TTL_MS = 15000;
     private static final int SOCKET_TIMEOUT_MS = 20000;
+    private static final int MAX_INCOMING = 8;
 
     /** Dispositivo de la bóveda visto en la red local. */
     public record Nearby(InetAddress address, int port, String idTagHex, long lastSeen) {}
@@ -47,7 +48,7 @@ public final class PeerService implements Closeable {
     private final boolean multicast;
     private final ExecutorService workers = Executors.newCachedThreadPool(r -> { Thread t = new Thread(r, "cipherkey-p2p"); t.setDaemon(true); return t; });
     private final Map<String, Nearby> nearby = new ConcurrentHashMap<>();
-    private final Object sessionLock = new Object();
+    private final Semaphore slots = new Semaphore(MAX_INCOMING);
     private volatile ServerSocket server;
     private volatile MulticastSocket mcast;
     private volatile long pairingUntil;
@@ -112,9 +113,10 @@ public final class PeerService implements Closeable {
         Socket s = new Socket();
         try {
             s.connect(addr, 5000);
-            s.setSoTimeout(newPeer ? 120_000 : SOCKET_TIMEOUT_MS); // al vincular el usuario tarda en comparar el código
+            s.setSoTimeout(SOCKET_TIMEOUT_MS);
             Identity id = identity();
             try (SecureChannel ch = SecureChannel.connect(s.getInputStream(), s.getOutputStream(), s, id.syncKey, id.key, id.deviceId, id.name)) {
+                if (newPeer) s.setSoTimeout(120_000); // ya autenticado: al vincular el usuario tarda en comparar el código
                 PeerSync.Result r = PeerSync.run(ch, true, doc, newPeer,
                         (name, sas) -> ui != null && ui.confirmSas(name, sas, false), clock);
                 listener.synced(r, false);
@@ -134,7 +136,8 @@ public final class PeerService implements Closeable {
         while (!closed) {
             try {
                 Socket s = server.accept();
-                workers.execute(() -> handle(s));
+                if (!slots.tryAcquire()) { s.close(); continue; } // saturado: se descarta sin gastar un hilo
+                workers.execute(() -> { try { handle(s); } finally { slots.release(); } });
             } catch (IOException e) {
                 if (closed) return;
             }
@@ -145,9 +148,10 @@ public final class PeerService implements Closeable {
         String src = s.getInetAddress().getHostAddress();
         try {
             if (limiter.blocked(src)) { s.close(); return; } // demasiados fallos: ni se contesta
-            s.setSoTimeout(pairingOpen() ? 120_000 : SOCKET_TIMEOUT_MS);
+            s.setSoTimeout(SOCKET_TIMEOUT_MS); // un desconocido no retiene el hilo más de esto antes de autenticarse
             Identity id = identity();
             try (SecureChannel ch = SecureChannel.accept(s.getInputStream(), s.getOutputStream(), s, id.syncKey, id.key, id.deviceId, id.name)) {
+                if (pairingOpen()) s.setSoTimeout(120_000);
                 PeerSync.Result r = PeerSync.run(ch, false, doc, pairingOpen(),
                         (name, sas) -> ui != null && ui.confirmSas(name, sas, true), clock);
                 limiter.success(src);

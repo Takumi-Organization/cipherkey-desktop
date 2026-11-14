@@ -177,6 +177,25 @@ src/
 
 ---
 
+## 4.5 Sincronización en proximidad (misma red)
+
+Sincroniza el escritorio y el móvil directamente por la red local, sin servidor ni internet. Detalle y justificación en
+[docs/adr/0001-sincronizacion-en-proximidad.md](docs/adr/0001-sincronizacion-en-proximidad.md). Requiere tener la
+sincronización configurada (la clave de sincronización de la bóveda es la base de la pertenencia).
+
+- **Canal seguro:** X25519 efímero + HKDF, tramas AES-256-GCM con contador estricto; cada lado exige antes una prueba HMAC de
+  pertenencia a la bóveda y firma Ed25519 de su identidad sobre el transcripto. Un tercero sin la clave no completa el apretón.
+- **Descubrimiento:** balizas UDP multidifusión (`239.255.67.75:47891`, cada 4 s) con etiqueta autenticada; no revelan nombre ni datos.
+  Si la red bloquea multidifusión, se conecta por `IP:puerto`.
+- **Emparejamiento (SAS):** la primera vez ambos muestran un código de 6 dígitos; se compara y se confirma en los dos. Después se
+  fija la clave pública del otro; si cambia, se aborta. Un dispositivo nuevo solo entra con la ventana «Vincular» abierta (120 s, un uso).
+- **Fusión:** resúmenes por registro, fusión a tres bandas; los conflictos se conservan para resolverlos a mano y no se pierde ninguna entrada.
+- **Puertos y límites:** `47890/tcp` y `47891/udp` (abrir en el cortafuegos); 16 MiB por trama; 5 fallos de autenticación por origen
+  en 10 min bloquean ese origen; máximo 8 conexiones entrantes simultáneas; 20 s de espera antes de autenticar.
+- **Verificación:** `mvn test` (61 pruebas) y `core` (43, incluidas `PeerSyncTest` y `PeerServerE2ETest`).
+- **Limitaciones:** la revocación de un miembro depende del servidor (la clave de sincronización es de toda la bóveda); redes con
+  aislamiento de clientes impiden la conexión; sin servicio en segundo plano en Android.
+
 # 🚀 Instalación
 
 Descarga la última versión desde **[Releases](../../releases/latest)**. Los paquetes **incluyen su propio Java**: no necesitas instalar nada más.
