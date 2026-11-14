@@ -135,4 +135,23 @@ class SyncServiceE2ETest {
         assertTrue(ex.getMessage().contains("403"), ex.getMessage());
         assertEquals(1, b.pendingCount(), "lo local no se pierde");
     }
+
+    @Test
+    void proximityStartFailureIsReported() throws Exception {
+        // el puerto de proximidad lo ocupa este mismo proceso (o ya lo tenía otro servicio): el arranque falla
+        ServerSocket hold = null;
+        try { hold = new ServerSocket(dev.cipherkey.core.p2p.PeerService.DEFAULT_PORT); } catch (java.io.IOException busy) { /* ya ocupado */ }
+        try {
+            PasswordManager a = open("f", PWD_A);
+            SyncService sa = new SyncService(a);
+            sa.enableNew(base, "", "pc");
+            sa.syncNow();
+            if (sa.proximity() == null) {
+                assertNotNull(sa.proximityError(), "el fallo de arranque no se traga en silencio");
+                assertTrue(sa.proximityError().contains("sincronización directa"), sa.proximityError());
+            }
+        } finally {
+            if (hold != null) hold.close();
+        }
+    }
 }

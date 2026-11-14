@@ -37,6 +37,7 @@ public final class SyncService {
     private volatile Consumer<Status> listener = s -> { };
     private volatile long lastSync;
     private volatile String lastError;
+    private volatile String proximityError;
     private volatile boolean running;
     private ScheduledFuture<?> debounce;
     private volatile ProximityService proximity;
@@ -74,6 +75,9 @@ public final class SyncService {
 
     public String lastRoute() { return lastRoute; }
 
+    /** Motivo por el que no arrancó la sincronización directa (puerto ocupado, etc.), o {@code null}. */
+    public String proximityError() { return proximityError; }
+
     private synchronized void ensureProximity() {
         if (proximity != null || !manager.isSyncConfigured() || pool.isShutdown()) return;
         try {
@@ -82,9 +86,10 @@ public final class SyncService {
                     () -> { dataListener.run(); syncSoonAfterPeer(); }, this::syncSoon);
             p.start();
             proximity = p;
+            proximityError = null;
         } catch (Exception e) {
             // puerto ocupado u otro fallo: la sincronización por servidor sigue funcionando
-            lastError = lastError;
+            proximityError = "No se pudo iniciar la sincronización directa: " + e;
         }
     }
 

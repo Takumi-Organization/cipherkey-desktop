@@ -88,7 +88,10 @@ final class ProximityPanel extends JPanel {
         unlink.setEnabled(has && r != null && r.linked());
         link.setEnabled(has);
         allow.setEnabled(has);
-        if (!has) status.setText("La sincronización directa se está iniciando…");
+        if (!has) {
+            String e = sync.proximityError();
+            status.setText(e != null ? "⚠ " + e : "La sincronización directa se está iniciando…");
+        }
     }
 
     void refresh() {
