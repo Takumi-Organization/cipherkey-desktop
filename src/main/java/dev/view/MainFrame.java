@@ -138,6 +138,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
 
         JButton generator = Ui.iconButton(Icons.get("key", 18), "Generador de contraseñas",
                 e -> new PasswordGeneratorDialog(this, false).setVisible(true));
+        JButton syncButton = Ui.iconButton(Icons.get("refresh", 18), "Sincronización (Ctrl+Mayús+S)", e -> openSync());
         JButton more = Ui.iconButton(Icons.get("more", 18), "Más opciones", e -> {});
         more.addActionListener(e -> buildMoreMenu().show(more, 0, more.getHeight()));
         JButton add = Ui.primary("Nueva entrada", Icons.white("plus", 16), e -> addEntry());
@@ -146,6 +147,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         right.setOpaque(false);
         right.add(generator);
+        right.add(syncButton);
         right.add(themeButton);
         right.add(more);
         right.add(Box.createHorizontalStrut(6));
@@ -225,6 +227,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
             searchField.selectAll();
         });
         bind(root, "ctrl L", "lock", this::lock);
+        bind(root, "ctrl shift S", "sync", this::openSync);
         bind(root, "ctrl B", "copyPassword", this::copyPassword);
         bind(root, "ctrl U", "copyUser", this::copyUsername);
         bind(root, "ctrl E", "edit", this::edit);
