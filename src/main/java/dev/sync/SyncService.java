@@ -39,6 +39,12 @@ public final class SyncService {
     private volatile String lastError;
     private volatile boolean running;
     private ScheduledFuture<?> debounce;
+    private volatile ProximityService proximity;
+    private volatile ProximityService.SasPrompt sasPrompt = (n, c, i) -> false;
+    private volatile Runnable dataListener = () -> { };
+    private volatile String lastRoute = "";
+    private volatile List<ServerClient.DeviceInfo> cachedDevices = List.of();
+    private volatile long devicesAt;
 
     public SyncService(PasswordManager manager) {
         this.manager = manager;
@@ -47,12 +53,42 @@ public final class SyncService {
     /** {@code listener} se invoca desde el hilo de sincronización: la interfaz debe pasar al hilo de Swing. */
     public void start(Consumer<Status> listener) {
         this.listener = listener;
+        pool.schedule(this::ensureProximity, 1, TimeUnit.SECONDS);
         pool.scheduleWithFixedDelay(this::runQuietly, 5, PERIOD_SECONDS, TimeUnit.SECONDS);
     }
 
     public void stop() {
         pool.shutdownNow();
+        ProximityService p = proximity;
+        if (p != null) p.close();
     }
+
+    /** Quién muestra el código de seguridad al vincular por proximidad (interfaz de usuario). */
+    public void setSasPrompt(ProximityService.SasPrompt prompt) { this.sasPrompt = prompt; }
+
+    /** Se invoca (en un hilo de fondo) cuando una sincronización directa cambió datos locales. */
+    public void setDataListener(Runnable r) { this.dataListener = r; }
+
+    /** Servicio de proximidad; se crea al estar configurada la sincronización. Puede ser {@code null}. */
+    public ProximityService proximity() { return proximity; }
+
+    public String lastRoute() { return lastRoute; }
+
+    private synchronized void ensureProximity() {
+        if (proximity != null || !manager.isSyncConfigured() || pool.isShutdown()) return;
+        try {
+            ProximityService p = new ProximityService(manager, dev.cipherkey.core.p2p.PeerService.DEFAULT_PORT, true,
+                    (name, sas, incoming) -> sasPrompt.ask(name, sas, incoming),
+                    () -> { dataListener.run(); syncSoonAfterPeer(); }, this::syncSoon);
+            p.start();
+            proximity = p;
+        } catch (Exception e) {
+            // puerto ocupado u otro fallo: la sincronización por servidor sigue funcionando
+            lastError = lastError;
+        }
+    }
+
+    private void syncSoonAfterPeer() { syncSoon(); }
 
     /** Pide una sincronización pronto (agrupando llamadas seguidas). */
     public synchronized void syncSoon() {
@@ -78,15 +114,32 @@ public final class SyncService {
         if (!manager.isSyncConfigured()) throw new IllegalStateException("La sincronización no está configurada");
         running = true;
         listener.accept(status());
+        ensureProximity();
+        // 1) Proximidad primero: si hay dispositivos vinculados en la red local, se sincroniza directamente con ellos.
+        int viaPeers = 0;
+        ProximityService prox = proximity;
+        if (prox != null) {
+            try { prox.setServerDevices(cachedDevices); } catch (RuntimeException ignored) { }
+            viaPeers = prox.syncTrustedNearby();
+        }
         try {
+            // 2) Servidor: siempre que esté accesible (orden global y dispositivos que no están cerca).
             SyncEngine.Summary s = manager.withDocument(d -> {
                 ServerClient c = new ServerClient(d.sync.serverUrl, d.sync.deviceId, DeviceKey.fromPrivateBase64(d.sync.devicePrivateKey));
                 return new SyncEngine(d, c, System::currentTimeMillis).sync();
             });
             lastSync = System.currentTimeMillis();
             lastError = null;
+            lastRoute = viaPeers > 0 ? "proximidad + servidor" : "servidor";
             return s;
         } catch (Exception e) {
+            if (viaPeers > 0) {
+                // 3) Servidor inaccesible pero sincronizado por proximidad: no es un fallo para el usuario.
+                lastSync = System.currentTimeMillis();
+                lastError = null;
+                lastRoute = "proximidad (servidor no accesible)";
+                return new SyncEngine.Summary(0, 0, manager.conflicts().size(), 0);
+            }
             lastError = e instanceof IOException ? "Sin conexión con el servidor (" + e.getMessage() + ")" : String.valueOf(e.getMessage());
             throw e;
         } finally {
@@ -138,8 +191,16 @@ public final class SyncService {
     }
 
     public List<ServerClient.DeviceInfo> devices() throws Exception {
-        return manager.withDocument(d -> client(d).devices());
+        List<ServerClient.DeviceInfo> list = manager.withDocument(d -> client(d).devices());
+        cachedDevices = list;
+        devicesAt = System.currentTimeMillis();
+        return list;
     }
+
+    /** Última lista de dispositivos del servidor sin volver a preguntar (puede estar vacía si nunca se consultó). */
+    public List<ServerClient.DeviceInfo> cachedDevices() { return cachedDevices; }
+
+    public long devicesAge() { return devicesAt == 0 ? Long.MAX_VALUE : System.currentTimeMillis() - devicesAt; }
 
     public String thisDeviceId() throws Exception {
         return manager.withDocument(d -> d.sync == null ? "" : d.sync.deviceId);

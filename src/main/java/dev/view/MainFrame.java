@@ -95,6 +95,8 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
                 AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
 
         sidebar.refresh(manager.getEntries());
+        syncService.setSasPrompt(this::askSas);
+        syncService.setDataListener(() -> SwingUtilities.invokeLater(() -> refresh(null)));
         syncService.start(st -> SwingUtilities.invokeLater(() -> onSyncStatus(st)));
         setMinimumSize(new Dimension(940, 580));
         Dimension saved = AppPrefs.windowSize();
@@ -543,6 +545,25 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
             JOptionPane.showMessageDialog(this, "No se pudo guardar: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             return false;
         }
+    }
+
+    /** Muestra el código de seguridad de la vinculación por proximidad y espera la decisión (se llama desde un hilo de red). */
+    private boolean askSas(String peer, String sas, boolean incoming) throws Exception {
+        boolean[] ok = {false};
+        SwingUtilities.invokeAndWait(() -> {
+            String spaced = sas.substring(0, 3) + " " + sas.substring(3);
+            JLabel code = new JLabel(spaced, SwingConstants.CENTER);
+            code.setFont(code.getFont().deriveFont(Font.BOLD, 34f));
+            JPanel p = new JPanel(new BorderLayout(0, 10));
+            p.add(new JLabel("<html>" + (incoming ? "«" + peer + "» quiere vincularse con este equipo." : "Vinculando con «" + peer + "».")
+                    + "<br>Comprueba que <b>el otro dispositivo muestra este mismo código</b> antes de aceptar.</html>"), BorderLayout.NORTH);
+            p.add(code, BorderLayout.CENTER);
+            Toolkit.getDefaultToolkit().beep();
+            Object[] opts = {"Coincide", "No coincide"};
+            ok[0] = JOptionPane.showOptionDialog(this, p, "Código de seguridad", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
+                    null, opts, opts[1]) == 0;
+        });
+        return ok[0];
     }
 
     private void openSync() {

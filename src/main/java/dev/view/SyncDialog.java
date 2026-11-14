@@ -30,7 +30,7 @@ public class SyncDialog extends JDialog {
         this.onDataChanged = onDataChanged;
         setContentPane(root);
         rebuild();
-        setMinimumSize(new Dimension(560, 460));
+        setMinimumSize(new Dimension(620, 560));
         pack();
         setLocationRelativeTo(parent);
     }
@@ -83,7 +83,8 @@ public class SyncDialog extends JDialog {
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         body.row(Ui.title("Sincronización"), 0);
         String last = st.lastSyncMillis() == 0 ? "aún no" : DateFormat.getDateTimeInstance().format(new Date(st.lastSyncMillis()));
-        body.row(Ui.muted("Última sincronización: " + last + "  ·  Pendientes: " + st.pending() + "  ·  Conflictos: " + st.conflicts()), 4);
+        String route = sync.lastRoute().isEmpty() ? "" : "  ·  Vía: " + sync.lastRoute();
+        body.row(Ui.muted("Última sincronización: " + last + "  ·  Pendientes: " + st.pending() + "  ·  Conflictos: " + st.conflicts() + route), 4);
         if (st.error() != null) {
             JLabel err = new JLabel("⚠ " + st.error());
             err.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
@@ -130,6 +131,7 @@ public class SyncDialog extends JDialog {
         });
         body.row(Ui.buttonBar(revoke), 4);
         loadDevices(model, devices, self);
+        body.row(new ProximityPanel(this, sync, onDataChanged), 14);
 
         // conflictos
         List<Record> conflicts = sync.conflicts();

@@ -1,0 +1,207 @@
+package dev.view;
+
+import com.formdev.flatlaf.FlatClientProperties;
+import dev.sync.ProximityService;
+import dev.sync.SyncService;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.Callable;
+
+/**
+ * Dispositivos vinculados y su estado (cercano / en línea / desconectado), sincronización directa por red local,
+ * vinculación con código de seguridad y desvinculación. Se refresca sola mientras está visible.
+ */
+final class ProximityPanel extends JPanel {
+    private final Component owner;
+    private final SyncService sync;
+    private final Runnable onDataChanged;
+    private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Dispositivo", "Estado", "Última sincronización", "Vinculado", "Dirección"}, 0) {
+        public boolean isCellEditable(int r, int c) { return false; }
+    };
+    private final JTable table = new JTable(model);
+    private final JLabel status = new JLabel(" ");
+    private final JProgressBar progress = new JProgressBar();
+    private final JButton syncOne = new JButton("Sincronizar con este");
+    private final JButton link = new JButton("Vincular…");
+    private final JButton allow = new JButton("Permitir vinculación");
+    private final JButton unlink = new JButton("Desvincular");
+    private volatile List<ProximityService.Row> rows = List.of();
+    private final Timer timer;
+
+    ProximityPanel(Component owner, SyncService sync, Runnable onDataChanged) {
+        super(new BorderLayout(0, 6));
+        this.owner = owner; this.sync = sync; this.onDataChanged = onDataChanged;
+        setOpaque(false);
+        JLabel title = new JLabel("Dispositivos vinculados y proximidad");
+        title.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
+        add(title, BorderLayout.NORTH);
+        table.setRowHeight(24);
+        JScrollPane sp = new JScrollPane(table);
+        sp.setPreferredSize(new Dimension(560, 130));
+        add(sp, BorderLayout.CENTER);
+
+        progress.setIndeterminate(true);
+        progress.setVisible(false);
+        JPanel south = new JPanel(new BorderLayout(0, 4));
+        south.setOpaque(false);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        buttons.setOpaque(false);
+        buttons.add(unlink); buttons.add(allow); buttons.add(link); buttons.add(syncOne);
+        south.add(status, BorderLayout.NORTH);
+        south.add(progress, BorderLayout.CENTER);
+        south.add(buttons, BorderLayout.SOUTH);
+        add(south, BorderLayout.SOUTH);
+
+        syncOne.addActionListener(e -> syncSelected());
+        link.addActionListener(e -> linkDialog());
+        allow.addActionListener(e -> allowPairing());
+        unlink.addActionListener(e -> unlinkSelected());
+        table.getSelectionModel().addListSelectionListener(e -> updateButtons());
+        updateButtons();
+
+        timer = new Timer(3000, e -> refresh());
+        timer.setInitialDelay(100);
+        timer.start();
+    }
+
+    @Override public void removeNotify() {
+        timer.stop();
+        super.removeNotify();
+    }
+
+    private ProximityService prox() { return sync.proximity(); }
+
+    private ProximityService.Row selected() {
+        int i = table.getSelectedRow();
+        return i < 0 || i >= rows.size() ? null : rows.get(i);
+    }
+
+    private void updateButtons() {
+        ProximityService.Row r = selected();
+        boolean has = prox() != null;
+        syncOne.setEnabled(has && r != null && r.linked() && !r.address().isEmpty());
+        unlink.setEnabled(has && r != null && r.linked());
+        link.setEnabled(has);
+        allow.setEnabled(has);
+        if (!has) status.setText("La sincronización directa se está iniciando…");
+    }
+
+    void refresh() {
+        ProximityService p = prox();
+        if (p == null) { updateButtons(); return; }
+        SwingWorker<List<ProximityService.Row>, Void> w = new SwingWorker<>() {
+            protected List<ProximityService.Row> doInBackground() throws Exception {
+                if (sync.devicesAge() > 30_000) {
+                    try { sync.devices(); } catch (Exception ignored) { /* sin servidor: se muestran los vinculados y los cercanos */ }
+                }
+                p.setServerDevices(sync.cachedDevices());
+                return p.rows();
+            }
+            protected void done() {
+                try {
+                    rows = get();
+                    ProximityService.Row keep = selected();
+                    String keepId = keep == null ? null : keep.deviceId();
+                    model.setRowCount(0);
+                    DateFormat f = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+                    int sel = -1, i = 0;
+                    for (ProximityService.Row r : rows) {
+                        model.addRow(new Object[]{r.name(), label(r.state()), r.lastSyncMillis() == 0 ? "—" : f.format(new Date(r.lastSyncMillis())),
+                                r.linked() ? "Sí" : "No", r.address()});
+                        if (r.deviceId().equals(keepId)) sel = i;
+                        i++;
+                    }
+                    if (sel >= 0) table.setRowSelectionInterval(sel, sel);
+                    String err = p.lastError();
+                    if (!busy) status.setText(err != null ? "⚠ " + err : (p.pairingOpen() ? "Vinculación permitida: el otro dispositivo ya puede conectarse." : " "));
+                    updateButtons();
+                } catch (Exception ignored) { }
+            }
+        };
+        w.execute();
+    }
+
+    private static String label(ProximityService.State s) {
+        return switch (s) { case NEARBY -> "Cercano"; case ONLINE -> "En línea"; case OFFLINE -> "Desconectado"; };
+    }
+
+    private volatile boolean busy;
+
+    private <T> void work(String label, Callable<T> task, java.util.function.Consumer<T> ok) {
+        busy = true;
+        status.setText(label);
+        progress.setVisible(true);
+        setEnabledAll(false);
+        SwingWorker<T, Void> w = new SwingWorker<>() {
+            protected T doInBackground() throws Exception { return task.call(); }
+            protected void done() {
+                busy = false;
+                progress.setVisible(false);
+                setEnabledAll(true);
+                try {
+                    ok.accept(get());
+                } catch (Exception e) {
+                    Throwable c = e.getCause() != null ? e.getCause() : e;
+                    status.setText("⚠ " + (c.getMessage() == null ? c.getClass().getSimpleName() : c.getMessage()));
+                }
+                refresh();
+            }
+        };
+        w.execute();
+    }
+
+    private void setEnabledAll(boolean on) {
+        for (JButton b : List.of(syncOne, link, allow, unlink)) b.setEnabled(on);
+        if (on) updateButtons();
+    }
+
+    private void syncSelected() {
+        ProximityService.Row r = selected();
+        if (r == null || r.address().isEmpty()) return;
+        work("Sincronizando con «" + r.name() + "» por la red local…", () -> prox().syncWith(r.address()), res -> {
+            status.setText("Sincronizado con «" + res.peerName() + "»: " + res.received() + " recibidos, " + res.sent() + " enviados"
+                    + (res.conflicts() > 0 ? ", " + res.conflicts() + " conflicto(s)" : "") + ".");
+            onDataChanged.run();
+        });
+    }
+
+    private void linkDialog() {
+        ProximityService.Row r = selected();
+        String initial = r != null && !r.address().isEmpty() ? r.address() : "";
+        String addr = (String) JOptionPane.showInputDialog(owner,
+                "Dirección del otro dispositivo (IP:puerto).\nEn el otro dispositivo debe estar abierta «Permitir vinculación».\n"
+                        + "Verás un código de 6 dígitos en ambos: compáralos antes de aceptar.",
+                "Vincular dispositivo cercano", JOptionPane.PLAIN_MESSAGE, null, null, initial);
+        if (addr == null || addr.isBlank()) return;
+        work("Conectando y esperando la confirmación del código…", () -> prox().pairWith(addr), res -> {
+            status.setText("Vinculado con «" + res.peerName() + "».");
+            onDataChanged.run();
+        });
+    }
+
+    private void allowPairing() {
+        prox().allowPairing(120_000);
+        JOptionPane.showMessageDialog(owner, "Durante 2 minutos este equipo aceptará la vinculación de un dispositivo de tu bóveda.\n"
+                + "En el otro dispositivo, elige este equipo (o escribe " + java.util.Objects.requireNonNullElse(localAddress(), "su IP") + ":" + prox().port() + ").\n"
+                + "Cuando se conecte verás un código de 6 dígitos para comparar.", "Permitir vinculación", JOptionPane.INFORMATION_MESSAGE);
+        refresh();
+    }
+
+    private static String localAddress() {
+        try { return java.net.InetAddress.getLocalHost().getHostAddress(); } catch (Exception e) { return null; }
+    }
+
+    private void unlinkSelected() {
+        ProximityService.Row r = selected();
+        if (r == null || !r.linked()) return;
+        if (JOptionPane.showConfirmDialog(owner, "¿Desvincular «" + r.name() + "» de la sincronización directa?\n"
+                + "Dejará de sincronizar por proximidad con este equipo hasta que lo vuelvas a vincular (el servidor no se toca).",
+                "Desvincular", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        work("Desvinculando…", () -> { prox().unlink(r.deviceId()); return null; }, x -> status.setText("«" + r.name() + "» desvinculado."));
+    }
+}
