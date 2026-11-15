@@ -1,5 +1,6 @@
 package dev.sync;
 
+import dev.cipherkey.core.model.LinkState;
 import dev.cipherkey.core.model.SyncState;
 import dev.cipherkey.core.p2p.Beacon;
 import dev.cipherkey.core.p2p.Locked;
@@ -16,8 +17,9 @@ import java.util.function.BiFunction;
 
 /**
  * Capa de escritorio sobre {@link PeerService}: sincronización directa por red local con los dispositivos vinculados,
- * lista de dispositivos con su estado (cercano, en línea, desconectado) y vinculación/desvinculación.
- * Ver docs/adr/0001-sincronizacion-en-proximidad.md.
+ * lista de dispositivos con su estado (cercano, en línea, desconectado) y vinculación/desvinculación. Funciona SIN servidor
+ * de sincronización: la identidad y los vínculos viven en la bóveda ({@link LinkState}).
+ * Ver docs/adr/0002-proximidad-sin-servidor.md (y 0001 para el canal y el descubrimiento).
  */
 public final class ProximityService implements Closeable {
     public enum State { NEARBY, ONLINE, OFFLINE }
@@ -27,6 +29,9 @@ public final class ProximityService implements Closeable {
 
     /** Petición al usuario: comparar el código. Devuelve true si coincide. */
     public interface SasPrompt { boolean ask(String peerName, String sas, boolean incoming) throws Exception; }
+
+    /** Petición al usuario antes de la primera fusión con un dispositivo: resumen. Devuelve true si acepta fusionar. */
+    public interface MergePrompt { boolean approve(PeerSync.Summary summary) throws Exception; }
 
     private static final long ONLINE_WINDOW_MS = 5 * 60_000L;
 
@@ -39,7 +44,7 @@ public final class ProximityService implements Closeable {
     private final Map<String, Long> lastOk = new HashMap<>();
     private volatile String lastError;
 
-    public ProximityService(PasswordManager manager, int port, boolean multicast, SasPrompt prompt,
+    public ProximityService(PasswordManager manager, int port, boolean multicast, SasPrompt prompt, MergePrompt mergePrompt,
                             Runnable onData, Runnable onPeerAppeared) {
         this.manager = manager;
         this.onData = onData;
@@ -58,9 +63,29 @@ public final class ProximityService implements Closeable {
                     }
                     @Override public void failed(String who, String message, boolean incoming) { lastError = message; }
                 }, System::currentTimeMillis);
+        this.peers.setDefaultDeviceName(hostName());
+        this.peers.setMergeGate(new PeerSync.MergeGate() {
+            @Override public boolean approve(PeerSync.Summary summary) throws Exception { return mergePrompt != null && mergePrompt.approve(summary); }
+            @Override public void backup() throws Exception { lastBackup = manager.backupVault("proximidad"); }
+        });
     }
 
-    public void start() throws Exception { peers.start(); }
+    private volatile java.nio.file.Path lastBackup;
+
+    /** Última copia de seguridad hecha antes de una primera fusión, o {@code null}. */
+    public java.nio.file.Path lastBackup() { return lastBackup; }
+
+    static String hostName() {
+        try { return java.net.InetAddress.getLocalHost().getHostName(); } catch (Exception e) { return "Escritorio"; }
+    }
+
+    public void start() throws Exception {
+        peers.start();
+        peers.ensureIdentity(); // la identidad de proximidad se crea y guarda con la bóveda, sin tocar red ni servidor
+    }
+
+    /** Motivo por el que no hay descubrimiento automático (la conexión por IP sigue disponible), o {@code null}. */
+    public String discoveryError() { return peers.discoveryError(); }
 
     public int port() { return peers.port(); }
 
@@ -76,14 +101,17 @@ public final class ProximityService implements Closeable {
     // ------------------------------------------------------------------ lista
 
     public List<Row> rows() throws Exception {
-        record Snap(byte[] key, String self, Map<String, SyncState.Peer> pinned) {}
-        Snap s = locked.run(d -> d.sync == null ? null : new Snap(Base64.getDecoder().decode(d.syncKey), d.sync.deviceId, new LinkedHashMap<>(d.sync.peers)));
-        if (s == null) return List.of();
+        record Snap(String self, String selfName, Map<String, SyncState.Peer> pinned) {}
+        Snap s = locked.run(d -> {
+            LinkState l = LinkState.ensure(d, hostName());
+            return new Snap(l.deviceId, l.deviceName, new LinkedHashMap<>(l.peers));
+        });
         Map<String, PeerService.Nearby> byTag = new HashMap<>();
         for (PeerService.Nearby n : peers.nearby()) byTag.put(n.idTagHex(), n);
 
         Map<String, Row> rows = new LinkedHashMap<>();
         Set<String> usedTags = new HashSet<>();
+        // dispositivos del servidor (si lo hay) que aún no están vinculados por proximidad: solo informativos
         Map<String, ServerClient.DeviceInfo> known = new LinkedHashMap<>();
         for (ServerClient.DeviceInfo d : serverDevices) if (!d.revoked() && !d.deviceId().equals(s.self())) known.put(d.deviceId(), d);
         Set<String> ids = new LinkedHashSet<>(s.pinned().keySet());
@@ -92,8 +120,8 @@ public final class ProximityService implements Closeable {
         for (String id : ids) {
             SyncState.Peer pinned = s.pinned().get(id);
             ServerClient.DeviceInfo srv = known.get(id);
-            String tag = DeviceKey.hex(Beacon.idTag(s.key(), id));
-            PeerService.Nearby near = byTag.get(tag);
+            String tag = pinned == null ? "" : DeviceKey.hex(Beacon.idTag(pinned.publicKey));
+            PeerService.Nearby near = tag.isEmpty() ? null : byTag.get(tag);
             if (near != null) usedTags.add(tag);
             String name = pinned != null && !pinned.name.isEmpty() ? pinned.name : srv != null ? srv.name() : id;
             long last = pinned != null ? pinned.lastSync : 0;
@@ -101,11 +129,11 @@ public final class ProximityService implements Closeable {
             State st = near != null ? State.NEARBY : (srv != null && srv.lastSeen() > 0 && now - srv.lastSeen() < ONLINE_WINDOW_MS) ? State.ONLINE : State.OFFLINE;
             rows.put(id, new Row(id, name, st, last, pinned != null, near == null ? "" : near.address().getHostAddress() + ":" + near.port()));
         }
-        // miembros de la bóveda vistos en la red que no están en ninguna lista (p. ej. sin consultar aún el servidor)
+        // dispositivos CipherKey vistos en la red que todavía no están vinculados (no se sabe su nombre hasta vincular)
         for (var e : byTag.entrySet()) {
             if (usedTags.contains(e.getKey())) continue;
             PeerService.Nearby n = e.getValue();
-            rows.put("tag:" + e.getKey(), new Row("tag:" + e.getKey(), "Dispositivo cercano", State.NEARBY, 0, false,
+            rows.put("tag:" + e.getKey(), new Row("tag:" + e.getKey(), "Dispositivo cercano (sin vincular)", State.NEARBY, 0, false,
                     n.address().getHostAddress() + ":" + n.port()));
         }
         return new ArrayList<>(rows.values());
@@ -140,7 +168,7 @@ public final class ProximityService implements Closeable {
     }
 
     public void unlink(String deviceId) throws Exception {
-        locked.run(d -> { d.sync.peers.remove(deviceId); return null; });
+        locked.run(d -> { if (d.link != null) d.link.peers.remove(deviceId); return null; });
     }
 
     static InetSocketAddress parse(String address) {

@@ -15,6 +15,8 @@ public final class VaultDocument {
     public String syncKey = Base64.getEncoder().encodeToString(VaultCrypto.randomBytes(32));
     public List<Record> records = new ArrayList<>();
     public SyncState sync;
+    /** Identidad y vínculos de proximidad de este dispositivo (independiente del servidor). */
+    public LinkState link;
     public JsonObject extra = new JsonObject();
 
     public Optional<Record> find(String uuid) {
@@ -30,6 +32,7 @@ public final class VaultDocument {
     public VaultDocument withoutSync() {
         VaultDocument d = fromBytes(toBytes());
         d.sync = null;
+        d.link = null;
         return d;
     }
 
@@ -43,6 +46,7 @@ public final class VaultDocument {
         records.forEach(r -> a.add(r.toJson()));
         o.add("records", a);
         if (sync != null) o.add("sync", sync.toJson());
+        if (link != null) o.add("link", link.toJson());
         return o.toString().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -56,8 +60,9 @@ public final class VaultDocument {
         d.records = new ArrayList<>();
         o.getAsJsonArray("records").forEach(e -> d.records.add(Record.fromJson(e.getAsJsonObject())));
         if (o.has("sync")) d.sync = SyncState.fromJson(o.getAsJsonObject("sync"));
+        if (o.has("link")) d.link = LinkState.fromJson(o.getAsJsonObject("link"));
         for (var e : o.entrySet())
-            if (!Set.of("schema", "vaultId", "syncKey", "records", "sync").contains(e.getKey())) d.extra.add(e.getKey(), e.getValue());
+            if (!Set.of("schema", "vaultId", "syncKey", "records", "sync", "link").contains(e.getKey())) d.extra.add(e.getKey(), e.getValue());
         return d;
     }
 }

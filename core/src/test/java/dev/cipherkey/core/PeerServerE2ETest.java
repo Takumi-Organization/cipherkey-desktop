@@ -80,6 +80,11 @@ class PeerServerE2ETest {
 
         a.peers = new PeerService(a, 0, false, (n, s, i) -> true, new PeerService.Listener() {}, System::currentTimeMillis);
         b.peers = new PeerService(b, 0, false, (n, s, i) -> true, new PeerService.Listener() {}, System::currentTimeMillis);
+        PeerSync.MergeGate ok = new PeerSync.MergeGate() {
+            @Override public boolean approve(PeerSync.Summary x) { return true; }
+            @Override public void backup() { }
+        };
+        a.peers.setMergeGate(ok); b.peers.setMergeGate(ok);
         a.peers.start(); b.peers.start();
         try {
             b.peers.openPairingWindow(60_000);

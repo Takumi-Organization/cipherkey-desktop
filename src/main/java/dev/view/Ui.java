@@ -88,4 +88,9 @@ public final class Ui {
         d.getRootPane().registerKeyboardAction(e -> d.dispose(), KeyStroke.getKeyStroke("ESCAPE"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW);
     }
+
+    /** Escapa texto que viene de fuera (p. ej. el nombre de otro dispositivo) antes de mostrarlo en una etiqueta HTML de Swing. */
+    static String escapeHtml(String t) {
+        return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
 }

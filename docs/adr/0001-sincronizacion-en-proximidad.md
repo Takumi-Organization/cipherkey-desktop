@@ -1,6 +1,6 @@
 # 0001 — Sincronización directa en la red local (proximidad)
 
-- **Estado:** aceptado
+- **Estado:** aceptado; el apartado de pertenencia por grupo y la integración exigiendo servidor quedan sustituidos por [0002](0002-proximidad-sin-servidor.md)
 - **Fecha:** 2026-11-14
 - **Ámbito:** `core` (protocolo), escritorio (`dev.sync.ProximityService`) y Android (`PeerManager`)
 

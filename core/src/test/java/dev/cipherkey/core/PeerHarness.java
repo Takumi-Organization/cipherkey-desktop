@@ -1,5 +1,6 @@
 package dev.cipherkey.core;
 
+import dev.cipherkey.core.model.LinkState;
 import dev.cipherkey.core.model.Record;
 import dev.cipherkey.core.model.SyncState;
 import dev.cipherkey.core.model.VaultDocument;
@@ -17,10 +18,12 @@ import java.nio.file.Path;
 
 /**
  * Dispositivo de escritorio SIMULADO para verificar a mano el emparejado y la sincronización con la app Android del
- * emulador (no es una prueba JUnit). Lee órdenes de la entrada estándar: {@code pairserver <código>}, {@code serversync},
- * {@code listen <puerto>}, {@code pair <ip:puerto>}, {@code sync <ip:puerto>}, {@code add <título> <contraseña>},
- * {@code edit <título> <contraseña>}, {@code dump}, {@code quit}. El código de seguridad se muestra y se acepta o rechaza
- * creando el fichero {@code <dir>/sas.ok} o {@code <dir>/sas.no}.
+ * emulador (no es una prueba JUnit). Funciona SIN servidor (bóveda propia en memoria, identidad de proximidad propia).
+ * Lee órdenes de la entrada estándar: {@code listen <puerto>}, {@code allow}, {@code pair <ip:puerto>},
+ * {@code sync <ip:puerto>}, {@code add <título> <contraseña>}, {@code edit <título> <contraseña>}, {@code dump},
+ * {@code unlink}, {@code quit}; y, para el caso con servidor, {@code pairserver <código>} y {@code serversync}.
+ * El código de seguridad se muestra y se acepta o rechaza creando {@code <dir>/sas.ok} o {@code <dir>/sas.no}; el resumen de
+ * la primera fusión, igual con {@code <dir>/merge.ok} o {@code <dir>/merge.no}.
  */
 public final class PeerHarness implements Locked {
     final VaultDocument doc = new VaultDocument();
@@ -32,6 +35,26 @@ public final class PeerHarness implements Locked {
     PeerHarness(Path dir) { this.dir = dir; }
 
     @Override public synchronized <T> T run(Work<T> w) throws Exception { return w.apply(doc); }
+
+    boolean waitFile(String prefix, String what) throws Exception {
+        Path ok = dir.resolve(prefix + ".ok"), no = dir.resolve(prefix + ".no");
+        Files.deleteIfExists(ok); Files.deleteIfExists(no);
+        System.out.println(what);
+        System.out.flush();
+        for (int i = 0; i < 1200; i++) {
+            if (Files.exists(ok)) { Files.deleteIfExists(ok); return true; }
+            if (Files.exists(no)) { Files.deleteIfExists(no); return false; }
+            Thread.sleep(100);
+        }
+        return false;
+    }
+
+    final PeerSync.MergeGate gate = new PeerSync.MergeGate() {
+        @Override public boolean approve(PeerSync.Summary s) throws Exception {
+            return waitFile("merge", "MERGE peer=" + s.peerName() + " mineOnly=" + s.mineOnly() + " theirsOnly=" + s.theirsOnly() + " differing=" + s.differing());
+        }
+        @Override public void backup() { System.out.println("BACKUP (simulado: el arnés vive en memoria)"); }
+    };
 
     boolean askSas(String peer, String sas, boolean incoming) throws Exception {
         Path ok = dir.resolve("sas.ok"), no = dir.resolve("sas.no");
@@ -47,7 +70,7 @@ public final class PeerHarness implements Locked {
 
     void dump() {
         synchronized (this) {
-            System.out.println("RECORDS " + doc.records.size() + " peers=" + doc.sync.peers.keySet() + " pending=" + doc.sync.pending.size());
+            System.out.println("RECORDS " + doc.records.size() + " peers=" + (doc.link == null ? "[]" : doc.link.peers.keySet()) + " pending=" + (doc.sync == null ? 0 : doc.sync.pending.size()));
             for (Record r : doc.records)
                 System.out.println("  - " + r.title + " | " + r.username + " | " + r.password + (r.deleted ? " [borrado]" : "") + (r.conflict != null ? " [CONFLICTO]" : ""));
         }
@@ -73,6 +96,7 @@ public final class PeerHarness implements Locked {
                         h.doc.sync.devicePrivateKey = h.key.privateBase64();
                         h.doc.sync.deviceId = ServerClient.enroll(code.server(), code.vaultId(), code.token(), h.key, "Escritorio (arnés)");
                         h.client = new ServerClient(code.server(), h.doc.sync.deviceId, h.key);
+                        h.doc.link = null; // se reutiliza la identidad del servidor
                         System.out.println("OK pairserver id=" + h.doc.sync.deviceId);
                     }
                     case "serversync" -> {
@@ -85,7 +109,10 @@ public final class PeerHarness implements Locked {
                             public void synced(PeerSync.Result r, boolean incoming) { System.out.println("EVENT synced " + r + " incoming=" + incoming); }
                             public void failed(String who, String m, boolean incoming) { System.out.println("EVENT failed " + who + " " + m + " incoming=" + incoming); }
                         }, System::currentTimeMillis);
+                        h.peers.setDefaultDeviceName("Escritorio (arnés)");
+                        h.peers.setMergeGate(h.gate);
                         h.peers.start();
+                        h.peers.ensureIdentity();
                         System.out.println("OK listen port=" + h.peers.port());
                     }
                     case "allow" -> { h.peers.openPairingWindow(120_000); System.out.println("OK allow"); }
@@ -96,7 +123,7 @@ public final class PeerHarness implements Locked {
                     }
                     case "add" -> {
                         synchronized (h) {
-                            Record r = Record.create(h.doc.sync.deviceId, System.currentTimeMillis());
+                            Record r = Record.create(LinkState.ensure(h.doc, "Escritorio (arnés)").deviceId, System.currentTimeMillis());
                             r.title = a[1]; r.username = "escritorio"; r.password = a.length > 2 ? a[2] : "x";
                             h.doc.records.add(r); SyncEngine.markDirty(h.doc, r);
                         }
@@ -105,10 +132,11 @@ public final class PeerHarness implements Locked {
                     case "edit" -> {
                         synchronized (h) {
                             Record r = h.doc.records.stream().filter(x -> x.title.equals(a[1])).findFirst().orElseThrow();
-                            r.password = a[2]; r.touch(h.doc.sync.deviceId, System.currentTimeMillis()); SyncEngine.markDirty(h.doc, r);
+                            r.password = a[2]; r.touch(h.doc.link.deviceId, System.currentTimeMillis()); SyncEngine.markDirty(h.doc, r);
                         }
                         System.out.println("OK edit");
                     }
+                    case "unlink" -> { synchronized (h) { h.doc.link.peers.clear(); } System.out.println("OK unlink"); }
                     case "dump" -> h.dump();
                     case "quit" -> { if (h.peers != null) h.peers.close(); System.exit(0); }
                     default -> System.out.println("?? " + line);

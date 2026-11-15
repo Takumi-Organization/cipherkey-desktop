@@ -23,7 +23,7 @@ public final class SyncState {
     /** uuid -> opId de la operación pendiente de enviar; el orden de inserción se conserva. */
     public Map<String, String> pending = new LinkedHashMap<>();
 
-    /** Dispositivo vinculado para sincronizar en proximidad: clave pública fijada (TOFU confirmado con código) y base de fusión. */
+    /** Dispositivo vinculado para sincronizar en proximidad (ver {@link LinkState}): clave pública fijada y base de fusión. */
     public static final class Peer {
         public String name = "";
         /** Clave pública Ed25519 (base64) fijada tras confirmar el código de seguridad. */
@@ -32,9 +32,6 @@ public final class SyncState {
         /** Último contenido de cada registro tal como lo tenía este par (base de la fusión a tres bandas). */
         public Map<String, Record> base = new LinkedHashMap<>();
     }
-
-    /** deviceId del par -> estado. Solo hay entradas de dispositivos cuyo código de seguridad se confirmó. */
-    public Map<String, Peer> peers = new LinkedHashMap<>();
 
     public JsonObject toJson() {
         JsonObject o = new JsonObject();
@@ -54,18 +51,6 @@ public final class SyncState {
         JsonObject p = new JsonObject();
         pending.forEach(p::addProperty);
         o.add("pending", p);
-        JsonObject ps = new JsonObject();
-        for (var e : peers.entrySet()) {
-            JsonObject x = new JsonObject();
-            x.addProperty("name", e.getValue().name);
-            x.addProperty("publicKey", e.getValue().publicKey);
-            x.addProperty("lastSync", e.getValue().lastSync);
-            JsonObject bb = new JsonObject();
-            for (var be : e.getValue().base.entrySet()) bb.add(be.getKey(), be.getValue().toJson());
-            x.add("base", bb);
-            ps.add(e.getKey(), x);
-        }
-        o.add("peers", ps);
         return o;
     }
 
@@ -82,17 +67,6 @@ public final class SyncState {
                     x.has("base") ? Record.fromJson(x.getAsJsonObject("base")) : null));
         }
         for (var e : o.getAsJsonObject("pending").entrySet()) s.pending.put(e.getKey(), e.getValue().getAsString());
-        if (o.has("peers")) {
-            for (var e : o.getAsJsonObject("peers").entrySet()) {
-                JsonObject x = e.getValue().getAsJsonObject();
-                Peer p = new Peer();
-                p.name = x.get("name").getAsString();
-                p.publicKey = x.get("publicKey").getAsString();
-                p.lastSync = x.get("lastSync").getAsLong();
-                for (var b : x.getAsJsonObject("base").entrySet()) p.base.put(b.getKey(), Record.fromJson(b.getValue().getAsJsonObject()));
-                s.peers.put(e.getKey(), p);
-            }
-        }
         return s;
     }
 }

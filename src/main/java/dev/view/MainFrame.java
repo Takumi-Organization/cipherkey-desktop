@@ -96,6 +96,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
 
         sidebar.refresh(manager.getEntries());
         syncService.setSasPrompt(this::askSas);
+        syncService.setMergePrompt(this::askMerge);
         syncService.setDataListener(() -> SwingUtilities.invokeLater(() -> refresh(null)));
         syncService.start(st -> SwingUtilities.invokeLater(() -> onSyncStatus(st)));
         setMinimumSize(new Dimension(940, 580));
@@ -138,7 +139,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
 
         JButton generator = Ui.iconButton(Icons.get("key", 18), "Generador de contraseñas",
                 e -> new PasswordGeneratorDialog(this, false).setVisible(true));
-        JButton syncButton = Ui.iconButton(Icons.get("refresh", 18), "Sincronización (Ctrl+Mayús+S)", e -> openSync());
+        JButton syncButton = Ui.iconButton(Icons.get("refresh", 18), "Sincronización y dispositivos cercanos (Ctrl+Mayús+S)", e -> openSync());
         JButton more = Ui.iconButton(Icons.get("more", 18), "Más opciones", e -> {});
         more.addActionListener(e -> buildMoreMenu().show(more, 0, more.getHeight()));
         JButton add = Ui.primary("Nueva entrada", Icons.white("plus", 16), e -> addEntry());
@@ -170,7 +171,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         exportItem.addActionListener(e -> exportCsv());
         JMenuItem backupItem = new JMenuItem("Copia de seguridad…", Icons.get("save"));
         backupItem.addActionListener(e -> backupVault());
-        JMenuItem syncItem = new JMenuItem("Sincronización…", Icons.get("refresh"));
+        JMenuItem syncItem = new JMenuItem("Sincronización y dispositivos cercanos…", Icons.get("refresh"));
         syncItem.addActionListener(e -> openSync());
         JMenuItem auditItem = new JMenuItem("Auditoría de seguridad", Icons.get("shield"));
         auditItem.addActionListener(e -> openAudit());
@@ -558,12 +559,29 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
             JLabel code = new JLabel(spaced, SwingConstants.CENTER);
             code.setFont(code.getFont().deriveFont(Font.BOLD, 34f));
             JPanel p = new JPanel(new BorderLayout(0, 10));
-            p.add(new JLabel("<html>" + (incoming ? "«" + peer + "» quiere vincularse con este equipo." : "Vinculando con «" + peer + "».")
+            p.add(new JLabel("<html>" + (incoming ? "«" + Ui.escapeHtml(peer) + "» quiere vincularse con este equipo." : "Vinculando con «" + Ui.escapeHtml(peer) + "».")
                     + "<br>Comprueba que <b>el otro dispositivo muestra este mismo código</b> antes de aceptar.</html>"), BorderLayout.NORTH);
             p.add(code, BorderLayout.CENTER);
             Toolkit.getDefaultToolkit().beep();
             Object[] opts = {"Coincide", "No coincide"};
             ok[0] = JOptionPane.showOptionDialog(this, p, "Código de seguridad", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
+                    null, opts, opts[1]) == 0;
+        });
+        return ok[0];
+    }
+
+    /** Resumen de la primera fusión con otro dispositivo: el usuario decide; antes de fusionar se hace una copia de seguridad. */
+    private boolean askMerge(dev.cipherkey.core.p2p.PeerSync.Summary x) throws Exception {
+        boolean[] ok = {false};
+        SwingUtilities.invokeAndWait(() -> {
+            String msg = "<html><b>Primera sincronización con «" + Ui.escapeHtml(x.peerName()) + "»</b><br><br>"
+                    + "• " + x.mineOnly() + " entradas nuevas de este dispositivo (se enviarán al otro)<br>"
+                    + "• " + x.theirsOnly() + " entradas nuevas del otro dispositivo (se añadirán aquí)<br>"
+                    + "• " + x.differing() + " con el mismo identificador pero contenido distinto (se conservan las dos versiones como conflicto)<br><br>"
+                    + "Se hará una copia de seguridad de tu bóveda antes de fusionar. "
+                    + "No se borra ni se sustituye ninguna entrada.</html>";
+            Object[] opts = {"Fusionar", "Cancelar"};
+            ok[0] = JOptionPane.showOptionDialog(this, msg, "Fusionar bóvedas", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
                     null, opts, opts[1]) == 0;
         });
         return ok[0];

@@ -1,5 +1,6 @@
 package dev.cipherkey.core.p2p;
 
+import dev.cipherkey.core.model.LinkState;
 import dev.cipherkey.core.sync.DeviceKey;
 
 import java.io.Closeable;
@@ -11,10 +12,10 @@ import java.util.concurrent.*;
 import java.util.function.LongSupplier;
 
 /**
- * Servicio de proximidad por red local: escucha conexiones de otros dispositivos de la bóveda, anuncia su presencia por
- * multidifusión UDP, descubre a los demás y sincroniza directamente con ellos. Reutilizable por escritorio y Android.
- * Las conexiones entrantes solo se aceptan de miembros de la bóveda; un dispositivo nuevo solo se acepta mientras el
- * usuario mantiene abierta la ventana de vincular.
+ * Servicio de proximidad por red local, SIN servidor: escucha conexiones de otros dispositivos, anuncia su presencia por
+ * multidifusión UDP, descubre a los demás y sincroniza directamente con los vinculados. Reutilizable por escritorio y
+ * Android. Un dispositivo desconocido solo avanza mientras el usuario mantiene abierta la ventana de vincular, y aun así
+ * hace falta confirmar el código de seguridad en ambos lados (ver docs/adr/0002-proximidad-sin-servidor.md).
  */
 public final class PeerService implements Closeable {
     public static final int DEFAULT_PORT = 47890;
@@ -53,6 +54,18 @@ public final class PeerService implements Closeable {
     private volatile MulticastSocket mcast;
     private volatile long pairingUntil;
     private volatile boolean closed;
+    private volatile String defaultName = "Dispositivo";
+    private volatile PeerSync.MergeGate gate;
+    private volatile String discoveryError;
+
+    /** Nombre con que se crea la identidad de proximidad la primera vez (si la bóveda aún no tiene una). */
+    public void setDefaultDeviceName(String name) { if (name != null && !name.isBlank()) this.defaultName = name; }
+
+    /** Puerta de la primera fusión con cada par (resumen + confirmación + copia de seguridad). Sin ella esa fusión se rechaza. */
+    public void setMergeGate(PeerSync.MergeGate gate) { this.gate = gate; }
+
+    /** Crea ya la identidad (y la guarda con la bóveda) para poder anunciarse y vincular. */
+    public void ensureIdentity() throws Exception { identity(); }
 
     public PeerService(Locked doc, int port, boolean multicast, Ui ui, Listener listener, LongSupplier clock) {
         this.doc = doc; this.requestedPort = port; this.multicast = multicast; this.ui = ui; this.listener = listener; this.clock = clock;
@@ -62,7 +75,11 @@ public final class PeerService implements Closeable {
     public int port() { return server == null ? 0 : server.getLocalPort(); }
 
     public void start() throws Exception {
-        server = new ServerSocket(requestedPort);
+        try {
+            server = new ServerSocket(requestedPort);
+        } catch (BindException e) {
+            throw new IOException("el puerto " + requestedPort + " está ocupado por otro programa (¿hay otra copia de CipherKey abierta?)", e);
+        }
         workers.execute(this::acceptLoop);
         if (multicast) {
             try {
@@ -76,9 +93,14 @@ public final class PeerService implements Closeable {
             } catch (IOException e) {
                 // sin multidifusión (red restringida, sin interfaz): se puede seguir conectando por dirección
                 mcast = null;
+                discoveryError = "Sin descubrimiento automático (" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())
+                        + "): conecta escribiendo la dirección IP del otro dispositivo";
             }
         }
     }
+
+    /** Motivo por el que no hay descubrimiento automático en la red (sin red multidifusión, puerto UDP ocupado...), o {@code null}. */
+    public String discoveryError() { return discoveryError; }
 
     private static void joinAll(MulticastSocket ms) throws IOException {
         InetAddress g = InetAddress.getByName(GROUP);
@@ -115,10 +137,10 @@ public final class PeerService implements Closeable {
             s.connect(addr, 5000);
             s.setSoTimeout(SOCKET_TIMEOUT_MS);
             Identity id = identity();
-            try (SecureChannel ch = SecureChannel.connect(s.getInputStream(), s.getOutputStream(), s, id.syncKey, id.key, id.deviceId, id.name)) {
-                if (newPeer) s.setSoTimeout(120_000); // ya autenticado: al vincular el usuario tarda en comparar el código
+            try (SecureChannel ch = SecureChannel.connect(s.getInputStream(), s.getOutputStream(), s, id.key, id.deviceId)) {
+                ch.onReadTimeout(ms -> { try { s.setSoTimeout(ms); } catch (SocketException ignored) { } });
                 PeerSync.Result r = PeerSync.run(ch, true, doc, newPeer,
-                        (name, sas) -> ui != null && ui.confirmSas(name, sas, false), clock);
+                        (name, sas) -> ui != null && ui.confirmSas(name, sas, false), gate, clock);
                 listener.synced(r, false);
                 return r;
             }
@@ -150,10 +172,10 @@ public final class PeerService implements Closeable {
             if (limiter.blocked(src)) { s.close(); return; } // demasiados fallos: ni se contesta
             s.setSoTimeout(SOCKET_TIMEOUT_MS); // un desconocido no retiene el hilo más de esto antes de autenticarse
             Identity id = identity();
-            try (SecureChannel ch = SecureChannel.accept(s.getInputStream(), s.getOutputStream(), s, id.syncKey, id.key, id.deviceId, id.name)) {
-                if (pairingOpen()) s.setSoTimeout(120_000);
+            try (SecureChannel ch = SecureChannel.accept(s.getInputStream(), s.getOutputStream(), s, id.key, id.deviceId)) {
+                ch.onReadTimeout(ms -> { try { s.setSoTimeout(ms); } catch (SocketException ignored) { } });
                 PeerSync.Result r = PeerSync.run(ch, false, doc, pairingOpen(),
-                        (name, sas) -> ui != null && ui.confirmSas(name, sas, true), clock);
+                        (name, sas) -> ui != null && ui.confirmSas(name, sas, true), gate, clock);
                 limiter.success(src);
                 if (r.newlyTrusted()) closePairingWindow(); // el código de vincular sirve para un solo dispositivo
                 listener.synced(r, true);
@@ -185,10 +207,10 @@ public final class PeerService implements Closeable {
                 DatagramPacket p = new DatagramPacket(buf, buf.length);
                 mcast.receive(p);
                 Identity id = identityCached();
-                Beacon.Parsed b = Beacon.parse(id.syncKey, p.getData(), p.getLength());
+                Beacon.Parsed b = Beacon.parse(p.getData(), p.getLength());
                 if (b == null) continue;
                 String tag = DeviceKey.hex(b.idTag());
-                if (Arrays.equals(b.idTag(), Beacon.idTag(id.syncKey, id.deviceId))) continue; // es el mío
+                if (Arrays.equals(b.idTag(), Beacon.idTag(id.key.publicBase64()))) continue; // es el mío
                 Nearby n = new Nearby(p.getAddress(), b.port(), tag, clock.getAsLong());
                 if (nearby.put(tag, n) == null) listener.peersChanged();
             } catch (IOException e) {
@@ -201,7 +223,7 @@ public final class PeerService implements Closeable {
         while (!closed) {
             try {
                 Identity id = identityCached();
-                byte[] data = Beacon.build(id.syncKey, id.deviceId, port());
+                byte[] data = Beacon.build(id.key.publicBase64(), port());
                 InetAddress g = InetAddress.getByName(GROUP);
                 for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
                     try {
@@ -221,7 +243,7 @@ public final class PeerService implements Closeable {
 
     // ------------------------------------------------------------------ interno
 
-    private record Identity(byte[] syncKey, DeviceKey key, String deviceId, String name) {}
+    private record Identity(DeviceKey key, String deviceId, String name) {}
 
     private volatile Identity cachedId;
     private volatile long cachedIdAt;
@@ -236,10 +258,10 @@ public final class PeerService implements Closeable {
     }
 
     private Identity identity() throws Exception {
+        String dn = defaultName;
         return doc.run(d -> {
-            if (d.sync == null) throw new IllegalStateException("La sincronización no está configurada");
-            return new Identity(Base64.getDecoder().decode(d.syncKey), DeviceKey.fromPrivateBase64(d.sync.devicePrivateKey),
-                    d.sync.deviceId, d.sync.deviceName);
+            LinkState l = LinkState.ensure(d, dn);
+            return new Identity(DeviceKey.fromPrivateBase64(l.devicePrivateKey), l.deviceId, l.deviceName);
         });
     }
 

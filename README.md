@@ -177,24 +177,40 @@ src/
 
 ---
 
-## 4.5 Sincronización en proximidad (misma red)
+## 4.5 Sincronización en proximidad (misma red, sin servidor)
 
-Sincroniza el escritorio y el móvil directamente por la red local, sin servidor ni internet. Detalle y justificación en
-[docs/adr/0001-sincronizacion-en-proximidad.md](docs/adr/0001-sincronizacion-en-proximidad.md). Requiere tener la
-sincronización configurada (la clave de sincronización de la bóveda es la base de la pertenencia).
+Sincroniza el escritorio y el móvil directamente por la red local, **sin servidor ni internet y sin configurar nada**. Diseño en
+[docs/adr/0002-proximidad-sin-servidor.md](docs/adr/0002-proximidad-sin-servidor.md) (canal y descubrimiento en
+[0001](docs/adr/0001-sincronizacion-en-proximidad.md)). Arranca al **desbloquear** la bóveda y se para al bloquearla.
 
-- **Canal seguro:** X25519 efímero + HKDF, tramas AES-256-GCM con contador estricto; cada lado exige antes una prueba HMAC de
-  pertenencia a la bóveda y firma Ed25519 de su identidad sobre el transcripto. Un tercero sin la clave no completa el apretón.
-- **Descubrimiento:** balizas UDP multidifusión (`239.255.67.75:47891`, cada 4 s) con etiqueta autenticada; no revelan nombre ni datos.
-  Si la red bloquea multidifusión, se conecta por `IP:puerto`.
-- **Emparejamiento (SAS):** la primera vez ambos muestran un código de 6 dígitos; se compara y se confirma en los dos. Después se
-  fija la clave pública del otro; si cambia, se aborta. Un dispositivo nuevo solo entra con la ventana «Vincular» abierta (120 s, un uso).
-- **Fusión:** resúmenes por registro, fusión a tres bandas; los conflictos se conservan para resolverlos a mano y no se pierde ninguna entrada.
-- **Puertos y límites:** `47890/tcp` y `47891/udp` (abrir en el cortafuegos); 16 MiB por trama; 5 fallos de autenticación por origen
-  en 10 min bloquean ese origen; máximo 8 conexiones entrantes simultáneas; 20 s de espera antes de autenticar.
-- **Verificación:** `mvn test` (61 pruebas) y `core` (43, incluidas `PeerSyncTest` y `PeerServerE2ETest`).
-- **Limitaciones:** la revocación de un miembro depende del servidor (la clave de sincronización es de toda la bóveda); redes con
-  aislamiento de clientes impiden la conexión; sin servicio en segundo plano en Android.
+**Cómo vincular dos dispositivos** (botón de sincronización de la barra o `Ctrl+Mayús+S` → sección «Dispositivos cercanos»):
+
+1. En un dispositivo pulsa **Permitir vinculación** (120 s, un dispositivo).
+2. En el otro pulsa **Vincular por proximidad…** (si está en la misma red aparece en la lista; si no, escribe `IP:puerto`).
+3. Aparece un **código de 6 dígitos** en las dos pantallas: compáralos y pulsa «Coincide» en ambas.
+4. La primera vez se muestra un **resumen** («X entradas nuevas de este dispositivo, Y del otro, Z con contenido distinto») que hay que
+   confirmar en ambos; antes se hace una copia de seguridad `<bóveda>.bak-proximidad-<fecha>` junto a la bóveda.
+
+- **Sin grupo ni servidor:** cada dispositivo tiene su identidad (Ed25519) dentro de su bóveda cifrada; la confianza es la clave
+  del otro **fijada tras confirmar el código**. Si esa clave cambia, se aborta. «Desvincular» corta la sincronización.
+- **Canal seguro:** X25519 efímero + HKDF, AES-256-GCM con contador estricto, firma Ed25519 sobre el transcripto y código con
+  compromiso (un intermediario acierta el código con probabilidad ≈ 1/10^6 por intento).
+- **Sin vinculación no se revela nada:** ni registros ni siquiera el nombre del dispositivo; 5 fallos por origen en 10 min
+  bloquean ese origen; máximo 8 conexiones entrantes; 20 s de espera antes de autenticar.
+- **Fusión:** la primera vez entre dos bóvedas distintas es una **unión segura**: nunca se sustituye ni se borra una entrada;
+  el mismo identificador con contenido distinto queda como conflicto para elegir («la mía», «la otra», «conservar ambas»); una lápida
+  de la otra bóveda no borra una entrada viva. Después, fusión a tres bandas por par.
+- **Descubrimiento:** balizas UDP multidifusión `239.255.67.75:47891` (cada 4 s; sin nombre ni datos, solo una etiqueta de la clave
+  pública: cualquiera de la LAN puede verlas). Si la red bloquea multidifusión, se conecta por `IP:puerto`.
+- **Puertos:** `47890/tcp` y `47891/udp` (abrir en el cortafuegos). Si no se puede arrancar (puerto ocupado...) el panel muestra el
+  motivo y se reintenta solo cada 20 s o con «Reintentar».
+- **Servidor (opcional y aparte):** el emparejamiento con servidor sigue disponible en la misma ventana, pero no es necesario.
+- **Verificación (2026-11-15):** `mvn package` en verde (66 pruebas de escritorio, incluidas `ProximityNoServerE2ETest` con dos
+  bóvedas reales sin servidor y `SyncServiceE2ETest`) y `core` (53, con `PeerSyncTest` de 23 y `PeerServerE2ETest`, que usa el
+  binario real del servidor). Arnés `PeerHarness` (dispositivo simulado sin servidor para probar contra el emulador de Android).
+- **No verificado:** sincronización real escritorio ↔ móvil físico con las bóvedas reales; descubrimiento multicast entre dos
+  máquinas reales; Wi-Fi con aislamiento de clientes. Límites: la revocación es local (desvincular en cada dispositivo); un vínculo
+  da acceso a toda la bóveda; sin servicio en segundo plano en Android.
 
 # 🚀 Instalación
 

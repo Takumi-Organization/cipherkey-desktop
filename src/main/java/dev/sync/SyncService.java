@@ -17,8 +17,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Sincronización opcional del escritorio: ejecuta {@link SyncEngine} en segundo plano cada minuto y tras cada cambio local
- * (con un pequeño retardo para agrupar ediciones). Sin red no falla: lo pendiente queda en la cola de la bóveda.
+ * Sincronización del escritorio. Dos vías independientes: (1) proximidad por red local, que arranca al desbloquear la bóveda y
+ * NO necesita servidor (docs/adr/0002-proximidad-sin-servidor.md); (2) servidor opcional: ejecuta {@link SyncEngine} en segundo
+ * plano cada minuto y tras cada cambio local (con un pequeño retardo para agrupar ediciones). Sin red no falla: lo pendiente
+ * queda en la cola de la bóveda.
  */
 public final class SyncService {
     public record Status(boolean configured, boolean running, long lastSyncMillis, int pending, int conflicts, String error) {}
@@ -42,6 +44,9 @@ public final class SyncService {
     private ScheduledFuture<?> debounce;
     private volatile ProximityService proximity;
     private volatile ProximityService.SasPrompt sasPrompt = (n, c, i) -> false;
+    private volatile ProximityService.MergePrompt mergePrompt = summary -> false; // sin interfaz, nunca se fusiona a ciegas
+    private volatile int proximityPort = dev.cipherkey.core.p2p.PeerService.DEFAULT_PORT;
+    private volatile boolean proximityMulticast = true;
     private volatile Runnable dataListener = () -> { };
     private volatile String lastRoute = "";
     private volatile List<ServerClient.DeviceInfo> cachedDevices = List.of();
@@ -55,6 +60,8 @@ public final class SyncService {
     public void start(Consumer<Status> listener) {
         this.listener = listener;
         pool.schedule(this::ensureProximity, 1, TimeUnit.SECONDS);
+        // si la proximidad no pudo arrancar (puerto ocupado, sin red), se reintenta sola cuando la causa desaparece
+        pool.scheduleWithFixedDelay(this::ensureProximity, 20, 20, TimeUnit.SECONDS);
         pool.scheduleWithFixedDelay(this::runQuietly, 5, PERIOD_SECONDS, TimeUnit.SECONDS);
     }
 
@@ -67,10 +74,25 @@ public final class SyncService {
     /** Quién muestra el código de seguridad al vincular por proximidad (interfaz de usuario). */
     public void setSasPrompt(ProximityService.SasPrompt prompt) { this.sasPrompt = prompt; }
 
+    /** Quién muestra el resumen de la primera fusión con un dispositivo (y pide confirmación). */
+    public void setMergePrompt(ProximityService.MergePrompt prompt) { this.mergePrompt = prompt; }
+
+    /** Puerto TCP de proximidad (por defecto 47890); debe fijarse antes de {@link #start}. Las pruebas usan 0. */
+    public void setProximityPort(int port) { this.proximityPort = port; }
+
+    /** Descubrimiento por multidifusión (activo por defecto); las pruebas lo desactivan para no tocar la red real. */
+    public void setProximityMulticast(boolean on) { this.proximityMulticast = on; }
+
+    /** Reintenta arrancar la proximidad ahora (p. ej. tras liberar el puerto) y devuelve el motivo del fallo, o {@code null}. */
+    public String retryProximity() {
+        ensureProximity();
+        return proximityError;
+    }
+
     /** Se invoca (en un hilo de fondo) cuando una sincronización directa cambió datos locales. */
     public void setDataListener(Runnable r) { this.dataListener = r; }
 
-    /** Servicio de proximidad; se crea al estar configurada la sincronización. Puede ser {@code null}. */
+    /** Servicio de proximidad; se crea al desbloquear la bóveda, con o sin servidor. Puede ser {@code null} si falló (ver {@link #proximityError}). */
     public ProximityService proximity() { return proximity; }
 
     public String lastRoute() { return lastRoute; }
@@ -79,17 +101,21 @@ public final class SyncService {
     public String proximityError() { return proximityError; }
 
     private synchronized void ensureProximity() {
-        if (proximity != null || !manager.isSyncConfigured() || pool.isShutdown()) return;
+        if (proximity != null || !manager.isUnlocked() || pool.isShutdown()) return;
+        ProximityService p = null;
         try {
-            ProximityService p = new ProximityService(manager, dev.cipherkey.core.p2p.PeerService.DEFAULT_PORT, true,
+            p = new ProximityService(manager, proximityPort, proximityMulticast,
                     (name, sas, incoming) -> sasPrompt.ask(name, sas, incoming),
+                    summary -> mergePrompt.approve(summary),
                     () -> { dataListener.run(); syncSoonAfterPeer(); }, this::syncSoon);
             p.start();
             proximity = p;
             proximityError = null;
         } catch (Exception e) {
-            // puerto ocupado u otro fallo: la sincronización por servidor sigue funcionando
-            proximityError = "No se pudo iniciar la sincronización directa: " + e;
+            // puerto ocupado u otro fallo: se muestra el motivo real; la sincronización por servidor (si la hay) sigue funcionando
+            if (p != null) p.close();
+            String why = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            proximityError = "No se pudo iniciar la sincronización por proximidad: " + why;
         }
     }
 
@@ -97,7 +123,7 @@ public final class SyncService {
 
     /** Pide una sincronización pronto (agrupando llamadas seguidas). */
     public synchronized void syncSoon() {
-        if (!manager.isSyncConfigured() || pool.isShutdown()) return;
+        if (!manager.isUnlocked() || pool.isShutdown()) return;
         if (debounce != null) debounce.cancel(false);
         debounce = pool.schedule(this::runQuietly, DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
     }
@@ -108,15 +134,25 @@ public final class SyncService {
 
     private void runQuietly() {
         try {
-            syncNow();
+            if (manager.isSyncConfigured()) syncNow(); else syncProximityOnly();
         } catch (Exception ignored) {
             // el error queda en lastError y se notifica; la cola se conserva para el siguiente intento
         }
     }
 
+    /** Sin servidor: sincroniza directamente con los dispositivos vinculados que estén en la red. Devuelve cuántos lo lograron. */
+    public int syncProximityOnly() {
+        ensureProximity();
+        ProximityService prox = proximity;
+        if (prox == null || !manager.isUnlocked()) return 0;
+        int n = prox.syncTrustedNearby();
+        if (n > 0) { lastSync = System.currentTimeMillis(); lastRoute = "proximidad"; }
+        return n;
+    }
+
     /** Sincroniza ahora (bloqueante). Devuelve el resumen o lanza la causa del fallo. */
     public SyncEngine.Summary syncNow() throws Exception {
-        if (!manager.isSyncConfigured()) throw new IllegalStateException("La sincronización no está configurada");
+        if (!manager.isSyncConfigured()) throw new IllegalStateException("La sincronización con servidor no está configurada");
         running = true;
         listener.accept(status());
         ensureProximity();

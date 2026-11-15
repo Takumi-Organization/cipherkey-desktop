@@ -176,6 +176,27 @@ public class PasswordManager {
         }
     }
 
+    public synchronized boolean isUnlocked() {
+        return doc != null && vault != null;
+    }
+
+    /**
+     * Copia de seguridad local de la bóveda (el mismo fichero cifrado, con la misma clave maestra) junto al original, como
+     * {@code <bóveda>.bak-proximidad-<fecha>}. Se usa antes de la primera fusión con un dispositivo nuevo. Devuelve la ruta.
+     */
+    public synchronized Path backupVault(String tag) throws Exception {
+        requireSession();
+        reconcile();
+        vault.save(doc.toBytes()); // lo último de la interfaz, en disco antes de copiar
+        String stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"));
+        Path target = vaultFile.resolveSibling(vaultFile.getFileName() + ".bak-" + tag + "-" + stamp);
+        java.nio.file.Files.copy(vaultFile, target, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
+        try {
+            java.nio.file.Files.setPosixFilePermissions(target, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        } catch (UnsupportedOperationException ignored) { /* sistemas sin POSIX */ }
+        return target;
+    }
+
     public synchronized boolean isSyncConfigured() {
         return doc != null && doc.sync != null && !doc.sync.serverUrl.isEmpty();
     }

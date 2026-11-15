@@ -16,7 +16,10 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
-/** Sincronización: configurar, emparejar dispositivos, ver/revocar dispositivos y resolver conflictos. */
+/**
+ * Sincronización: dispositivos cercanos (proximidad, siempre disponible y sin servidor), servidor opcional
+ * (configurar, emparejar, revocar) y resolución de conflictos.
+ */
 public class SyncDialog extends JDialog {
     private final SyncService sync;
     private final Runnable onDataChanged;
@@ -31,13 +34,17 @@ public class SyncDialog extends JDialog {
         setContentPane(root);
         rebuild();
         setMinimumSize(new Dimension(620, 560));
+        setPreferredSize(new Dimension(700, 680));
         pack();
         setLocationRelativeTo(parent);
     }
 
     private void rebuild() {
         root.removeAll();
-        root.add(sync.status().configured() ? configuredView() : setupView(), BorderLayout.CENTER);
+        JScrollPane sp = new JScrollPane(sync.status().configured() ? configuredView() : setupView());
+        sp.setBorder(null);
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        root.add(sp, BorderLayout.CENTER);
         root.revalidate();
         root.repaint();
     }
@@ -53,8 +60,14 @@ public class SyncDialog extends JDialog {
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         body.row(Ui.title("Sincronización"), 0);
-        body.row(Ui.muted("Opcional. Tus contraseñas se cifran en este equipo; el servidor solo guarda datos cifrados."), 4);
-        body.row(Ui.labeled("Dirección del servidor (HTTPS)", url), 16);
+        body.row(Ui.muted("Entre tus dispositivos en la misma red no hace falta ningún servidor."), 4);
+        body.row(new ProximityPanel(this, sync, onDataChanged), 10);
+        body.row(new JSeparator(), 16);
+        JLabel srv = new JLabel("Servidor de sincronización (opcional)");
+        srv.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
+        body.row(srv, 12);
+        body.row(Ui.muted("Para sincronizar fuera de tu red. Tus contraseñas se cifran en este equipo; el servidor solo guarda datos cifrados."), 4);
+        body.row(Ui.labeled("Dirección del servidor (HTTPS)", url), 12);
         body.row(Ui.labeled("Nombre de este dispositivo", name), 10);
         body.row(Ui.labeled("Token de administrador del servidor (si lo exige)", admin), 10);
         JButton create = Ui.primary("Activar con una bóveda nueva", null, e -> {
@@ -72,6 +85,9 @@ public class SyncDialog extends JDialog {
         pair.addActionListener(e -> run("Vinculando…", () -> { sync.pair(code.getText(), name.getText().trim()); return null; },
                 r -> { onDataChanged.run(); rebuild(); }));
         body.row(Ui.buttonBar(pair), 12);
+        JButton close = new JButton("Cerrar");
+        close.addActionListener(e -> dispose());
+        body.row(Ui.buttonBar(close), 14);
         return body;
     }
 
@@ -105,7 +121,7 @@ public class SyncDialog extends JDialog {
         body.row(Ui.buttonBar(off, pairCode, now), 14);
 
         // dispositivos
-        JLabel dt = new JLabel("Dispositivos vinculados");
+        JLabel dt = new JLabel("Dispositivos del servidor");
         dt.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
         body.row(dt, 14);
         DefaultTableModel model = new DefaultTableModel(new Object[]{"Nombre", "Alta", "Última vez", "Estado"}, 0) {

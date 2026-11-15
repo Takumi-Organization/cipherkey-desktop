@@ -148,7 +148,7 @@ class SyncServiceE2ETest {
             sa.syncNow();
             if (sa.proximity() == null) {
                 assertNotNull(sa.proximityError(), "el fallo de arranque no se traga en silencio");
-                assertTrue(sa.proximityError().contains("sincronización directa"), sa.proximityError());
+                assertTrue(sa.proximityError().contains("proximidad"), sa.proximityError());
             }
         } finally {
             if (hold != null) hold.close();
