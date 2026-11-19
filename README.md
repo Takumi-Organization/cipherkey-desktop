@@ -378,3 +378,12 @@ Distribuido bajo licencia MIT.
 <p align="center">
   Hecho con ☕ y Java
 </p>
+---
+
+# 🎨 Identidad visual: Ryoku Glass (2026-11-19)
+
+La interfaz de escritorio comparte identidad con la app móvil de CipherKey: neutros fríos (oscuro `#0F1115` / `#171A20` / `#232830`; claro `#F4F5F7`), filetes finos, radios pequeños, **Inter** para toda la interfaz y **JetBrains Mono solo para datos** (contraseñas, códigos de un solo uso, dígitos de verificación). Cinco acentos con variante clara (Bermellón, **Oro** por defecto, Lima, Fucsia, Egeo) más uno personalizado; se conservan las claves guardadas (`ambar` = Oro, `azul` = Egeo; `naranja` se retiró y cae al acento por defecto). Los tests de `PaletteTest` miden el contraste WCAG AA de cada acento en ambos modos.
+
+Java2D no tiene «backdrop-filter», así que el **cristal** (`dev.view.Glass`) se hace a mano: se captura lo que queda debajo, se desenfoca (tres pasadas de caja), y se pinta sobre una base opaca con un velo y un filete con brillo arriba. Es una captura única, válida para superficies efímeras: solo lo usan los avisos (`Toast`). El resto de superficies son planas con filete, sin sombras.
+
+Capturas en `docs/capturas/glass-*.png` (renderizadas sin mostrar la ventana, con una bóveda ficticia). Fuentes y licencias en `src/main/resources/fonts/`.

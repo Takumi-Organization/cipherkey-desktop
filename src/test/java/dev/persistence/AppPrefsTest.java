@@ -38,7 +38,8 @@ class AppPrefsTest {
 
     @Test
     void defaults() {
-        assertFalse(AppPrefs.isDark());
+        assertTrue(AppPrefs.isDark(), "el tema por defecto es oscuro");
+        assertEquals("ambar", AppPrefs.accent(), "el acento por defecto es Oro");
         assertEquals(5, AppPrefs.autoLockMinutes());
         assertTrue(AppPrefs.recentVaults().isEmpty());
     }

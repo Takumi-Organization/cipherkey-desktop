@@ -4,10 +4,13 @@ import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.io.InputStream;
 
-/** Komiki Mono (MIT, ver resources/fonts/LICENSE-KomikiMono.txt) embebida; si no carga, cae a una monoespaciada del sistema. */
+/**
+ * Tipografía de Ryoku Glass, embebida (OFL, ver resources/fonts/LICENSE-*.txt): Inter para toda la interfaz y
+ * JetBrains Mono solo para datos (contraseñas, códigos de un solo uso, dígitos de verificación). Si no cargan, cae a la
+ * fuente lógica del sistema.
+ */
 public final class Fonts {
-    public static final String FAMILY = "Komiki Mono";
-    private static Font regular, bold;
+    private static Font regular, bold, monoRegular, monoBold;
     private static boolean loaded;
 
     private Fonts() {}
@@ -16,10 +19,12 @@ public final class Fonts {
     public static synchronized String install() {
         if (!loaded) {
             loaded = true;
-            regular = load("/fonts/KomikiMono-Regular.otf");
-            bold = load("/fonts/KomikiMono-Bold.otf");
+            regular = load("/fonts/Inter-Regular.ttf");
+            bold = load("/fonts/Inter-Bold.ttf");
+            monoRegular = load("/fonts/JetBrainsMono-Regular.ttf");
+            monoBold = load("/fonts/JetBrainsMono-Bold.ttf");
         }
-        return regular != null ? FAMILY : Font.MONOSPACED;
+        return regular != null ? regular.getFamily() : Font.SANS_SERIF;
     }
 
     private static Font load(String resource) {
@@ -35,11 +40,22 @@ public final class Fonts {
 
     public static Font regular(float size) {
         install();
-        return (regular != null ? regular : new Font(Font.MONOSPACED, Font.PLAIN, 12)).deriveFont(Font.PLAIN, size);
+        return (regular != null ? regular : new Font(Font.SANS_SERIF, Font.PLAIN, 12)).deriveFont(Font.PLAIN, size);
     }
 
     public static Font bold(float size) {
         install();
-        return (bold != null ? bold : new Font(Font.MONOSPACED, Font.BOLD, 12)).deriveFont(Font.PLAIN, size);
+        return (bold != null ? bold : new Font(Font.SANS_SERIF, Font.BOLD, 12)).deriveFont(Font.PLAIN, size);
+    }
+
+    /** Monoespaciada para DATOS (contraseñas, códigos): JetBrains Mono. */
+    public static Font mono(float size) {
+        install();
+        return (monoRegular != null ? monoRegular : new Font(Font.MONOSPACED, Font.PLAIN, 12)).deriveFont(Font.PLAIN, size);
+    }
+
+    public static Font monoBold(float size) {
+        install();
+        return (monoBold != null ? monoBold : new Font(Font.MONOSPACED, Font.BOLD, 12)).deriveFont(Font.PLAIN, size);
     }
 }

@@ -115,13 +115,13 @@ public class Sidebar extends JPanel {
 
         long favorites = entries.stream().filter(PasswordEntry::isFavorite).count();
         long totp = entries.stream().filter(e -> e.getTotpSecret() != null && !e.getTotpSecret().isBlank()).count();
-        listModel.addElement("00 // Bóveda");
+        listModel.addElement("Bóveda");
         listModel.addElement(new View(KEY_ALL, "Todas las entradas", Icons.get("list"), entries.size(), e -> true));
         listModel.addElement(new View("favorites", "Favoritas", Icons.get("star"), (int) favorites, PasswordEntry::isFavorite));
         listModel.addElement(new View("2fa", "Con código 2FA", Icons.get("timer"), (int) totp,
                 e -> e.getTotpSecret() != null && !e.getTotpSecret().isBlank()));
 
-        listModel.addElement("01 // Atención");
+        listModel.addElement("Atención");
         listModel.addElement(new View(KEY_HEALTH, "Salud de la bóveda", Icons.get("shield-check"), -1, e -> true, null,
                 health.total() == 0 ? null : String.valueOf(health.score()), false));
         listModel.addElement(flagView("weak", "Contraseñas débiles", "alert", health.weak(), health, VaultHealth.Flag.WEAK));
@@ -134,7 +134,7 @@ public class Sidebar extends JPanel {
             if (c != null && !c.isBlank()) categories.merge(c, 1, Integer::sum);
         }
         if (!categories.isEmpty()) {
-            listModel.addElement("02 // Categorías");
+            listModel.addElement("Categorías");
             categories.forEach((name, count) -> listModel.addElement(new View("cat:" + name.toLowerCase(), name, null, count,
                     e -> name.equalsIgnoreCase(e.getCategory()), Icons.Avatar.colorFor(name.toLowerCase()), null, false)));
         }
@@ -237,7 +237,7 @@ public class Sidebar extends JPanel {
             }
             int x = x0 + 14;
             if (v.dot() != null) {
-                Draw.fillBox(g2, v.dot(), x + 2, (h - 10) / 2, 10, 10, 2);
+                Draw.fillBox(g2, v.dot(), x + 2, (h - 10) / 2, 10, 10, 4);
             } else if (v.icon() != null) {
                 v.icon().paintIcon(this, g2, x, (h - v.icon().getIconHeight()) / 2);
             }
@@ -251,7 +251,7 @@ public class Sidebar extends JPanel {
                 if (v.badge() != null) {
                     g2.setFont(Fonts.bold(11));
                     int cw = g2.getFontMetrics().stringWidth(count) + 12;
-                    Draw.box(g2, selected ? p.accent() : null, selected ? null : p.line2(), right - cw, (h - 20) / 2, cw, 20, 3);
+                    Draw.box(g2, selected ? p.accent() : null, selected ? null : p.line2(), right - cw, (h - 20) / 2, cw, 20, 12);
                     g2.setColor(selected ? p.onAccent() : p.ink());
                     Draw.centeredText(g2, count, right - cw, (h - 20) / 2, cw, 20);
                     right -= cw + 6;

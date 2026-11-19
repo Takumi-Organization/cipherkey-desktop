@@ -32,9 +32,9 @@ public final class Ui {
         return l;
     }
 
-    /** Marcador de sección: «00 // TÍTULO». */
+    /** Título de sección: micro-etiqueta gris en mayúsculas (el número se conserva en la firma por compatibilidad, no se pinta). */
     public static JLabel section(int n, String text) {
-        return eyebrow(String.format("%02d // %s", n, text));
+        return eyebrow(text);
     }
 
     /** Botón con icono, sin borde, para barras de herramientas y acciones inline. */

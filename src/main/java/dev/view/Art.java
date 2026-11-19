@@ -21,17 +21,14 @@ public final class Art {
         Draw.sun(g, sunCx, sunCy, sunR, p.accentTint(0.12));
     }
 
-    /** Ventana con relleno desplazado y contenido según el tipo. */
+    /** Ventana plana con marco de esquinas suaves (sin sombra desplazada: Ryoku Glass no usa sombras) y contenido según el tipo. */
     public static void window(Graphics2D g, Kind kind, int x, int y, int w, int h) {
         Palette p = Draw.p();
-        int off = 6;
-        g.setColor(p.accent());
-        g.fillRect(x + off, y + off, w, h);
         g.setColor(p.paper());
-        g.fillRect(x, y, w, h);
+        g.fillRoundRect(x, y, w, h, Draw.RADIUS, Draw.RADIUS);
         g.setColor(p.ink());
-        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_MITER));
-        g.drawRect(x, y, w, h);
+        g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.drawRoundRect(x, y, w, h, Draw.RADIUS, Draw.RADIUS);
         g.drawLine(x, y + 24, x + w, y + 24);
         for (int i = 0; i < 3; i++) g.drawRect(x + 10 + i * 14, y + 8, 8, 8);
         g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_MITER));
@@ -74,7 +71,7 @@ public final class Art {
         g.drawLine(cx, cy + u / 4 + 8, cx, cy + u / 4 + 20);
     }
 
-    /** Ilustración completa con pie «01 // VENTANA» en un rectángulo. */
+    /** Ilustración completa con pie de texto en un rectángulo. */
     public static JComponent panel(Kind kind, String caption) {
         return new JComponent() {
             @Override

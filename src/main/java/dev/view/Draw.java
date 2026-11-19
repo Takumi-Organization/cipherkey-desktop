@@ -9,9 +9,10 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.Map;
 
-/** Primitivas de pintado planas (Java2D) del estilo Ryoku Kami: sin sombras, sin degradados. */
+/** Primitivas de pintado planas (Java2D) de Ryoku Glass: sin sombras ni degradados (el cristal vive en {@link Glass}). */
 public final class Draw {
-    public static final int RADIUS = 4;
+    /** Diámetro del arco de las esquinas (RoundRectangle2D): 20 = radio de 10, el «control» de Glass. */
+    public static final int RADIUS = 20;
 
     private Draw() {}
 
@@ -87,7 +88,7 @@ public final class Draw {
         FontMetrics fm = g.getFontMetrics();
         String t = text.toUpperCase();
         int w = fm.stringWidth(t) + 14, h = 18;
-        box(g, fill, border, x, y, w, h, 3);
+        box(g, fill, border, x, y, w, h, 12);
         g.setColor(fg);
         g.drawString(t, x + 7, baseline(fm, y, h));
         g.setFont(old);

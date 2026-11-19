@@ -72,7 +72,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         detail = new DetailPanel(this);
         sidebar = new Sidebar(this::onViewSelected, this::openSettings, this::lock);
         healthView = new HealthView(this::applyQueryFromHealth, this::openEntryFromHealth);
-        themeButton = Ui.iconButton(themeIcon(), "Cambiar entre Grafito y Washi", e -> toggleTheme());
+        themeButton = Ui.iconButton(themeIcon(), "Cambiar entre oscuro y claro", e -> toggleTheme());
         syncButton = new SyncButton(e -> openSync());
 
         buildLayout();
@@ -126,9 +126,9 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         listCard.add(buildListBar(), BorderLayout.NORTH);
         listCard.add(tableScroll, BorderLayout.CENTER);
         cardPanel.add(listCard, CARD_TABLE);
-        cardPanel.add(buildMessage(Art.Kind.VAULT, "00 // Bóveda vacía", "Tu bóveda está vacía",
+        cardPanel.add(buildMessage(Art.Kind.VAULT, "Bóveda vacía", "Tu bóveda está vacía",
                 "Guarda aquí tus contraseñas; se cifran en tu equipo.", "Añadir la primera entrada"), CARD_EMPTY);
-        cardPanel.add(buildMessage(Art.Kind.SELECT, "00 // Sin resultados", "Sin resultados",
+        cardPanel.add(buildMessage(Art.Kind.SELECT, "Sin resultados", "Sin resultados",
                 "Prueba con otra búsqueda o cambia de vista.", null), CARD_NO_RESULTS);
         cardPanel.add(healthView, CARD_HEALTH);
 

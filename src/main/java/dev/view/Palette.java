@@ -4,8 +4,8 @@ import java.awt.Color;
 import java.util.List;
 
 /**
- * Tokens de color del estilo «Ryoku Kami»: superficies planas, tinta, líneas finas y UN acento por tema.
- * Dos modos: Grafito (oscuro, por defecto) y Washi (claro). Es un valor inmutable; {@link ThemeManager} guarda el activo.
+ * Tokens de color de «Ryoku Glass»: neutros fríos, tinta, filetes finos y UN acento por tema. Dos modos: oscuro (por
+ * defecto) y claro. Es un valor inmutable; {@link ThemeManager} guarda el activo.
  */
 public record Palette(boolean dark, Color paper, Color raised, Color high, Color ink, Color dim, Color muted, Color faint,
                       Color accent, Color onAccent, Color ok, Color warn, Color error, Color secondary) {
@@ -17,34 +17,40 @@ public record Palette(boolean dark, Color paper, Color raised, Color high, Color
         }
     }
 
+    /**
+     * Las CLAVES se conservan (se guardan en las preferencias): «ambar» es Oro y «azul» es Egeo. «naranja» se retiró; un
+     * valor guardado que no exista cae al acento por defecto.
+     */
     public static final List<Accent> ACCENTS = List.of(
-            new Accent("bermellon", "Bermellón", new Color(0xFF5A47), new Color(0xC42A21)),
-            new Accent("naranja", "Naranja", new Color(0xFF7A29), new Color(0xB8420A)),
-            new Accent("lima", "Lima", new Color(0xB6E83C), new Color(0x4A7300)),
-            new Accent("fucsia", "Fucsia", new Color(0xFF5FB5), new Color(0xB80F73)),
-            new Accent("azul", "Azul eléctrico", new Color(0x5C98FF), new Color(0x1B47D6)),
-            new Accent("ambar", "Ámbar", new Color(0xFFB52E), new Color(0x8A5A00)));
+            new Accent("bermellon", "Bermellón", new Color(0xFF5A4A), new Color(0xD12B1F)),
+            new Accent("ambar", "Oro", new Color(0xF2B33D), new Color(0x8F5F00)),
+            new Accent("lima", "Lima", new Color(0xB6E04A), new Color(0x4F7A00)),
+            new Accent("fucsia", "Fucsia", new Color(0xFF6FB1), new Color(0xC4166F)),
+            new Accent("azul", "Egeo", new Color(0x62B6E8), new Color(0x0B6B99)));
 
-    public static final String DEFAULT_ACCENT = "bermellon";
+    public static final String DEFAULT_ACCENT = "ambar";
 
     /** Paleta de un modo con un acento concreto (ya adaptado al modo). */
     public static Palette of(boolean dark, Color accent) {
-        Color onAccent = bestText(accent, dark ? new Color(0x211D1A) : Color.WHITE, dark ? Color.WHITE : new Color(0x211D1A));
+        Color onAccent = bestText(accent, dark ? new Color(0x0F1115) : Color.WHITE, dark ? Color.WHITE : new Color(0x0F1115));
         return dark
-                ? new Palette(true, c(0x211D1A), c(0x2A2521), c(0x352F2A), c(0xECE4D8), c(0xC9C0B3), c(0xA69D90), c(0x8F867A),
-                        accent, onAccent, c(0x7FD0AE), c(0xF0B25E), c(0xF27A70), c(0x8FBDD1))
-                : new Palette(false, c(0xF3ECE0), c(0xFAF5EC), c(0xE9E0D1), c(0x26211C), c(0x4A423A), c(0x675D52), c(0x8A8074),
-                        accent, onAccent, c(0x1F6F4D), c(0x8A5A00), c(0xB3261E), c(0x2B6A86));
+                ? new Palette(true, c(0x0F1115), c(0x171A20), c(0x232830), c(0xECEFF4), c(0xB4BBC7), c(0x8E97A6), c(0x5F6877),
+                        accent, onAccent, c(0x6FD3A6), c(0xF0B25E), c(0xFF7A70), c(0x7FC4EC))
+                : new Palette(false, c(0xF4F5F7), c(0xFFFFFF), c(0xE9ECF0), c(0x14171C), c(0x4A515C), c(0x5F6773), c(0x9AA2AE),
+                        accent, onAccent, c(0x1B6B49), c(0x8A5A00), c(0xB3261E), c(0x0B6B99));
     }
 
     /** Paleta con un acento predefinido (por clave) o personalizado (hex #RRGGBB); si no se reconoce, el de por defecto. */
     public static Palette resolve(boolean dark, String accentKey, String customHex) {
         if ("custom".equals(accentKey)) {
             Color c = parseHex(customHex);
-            if (c != null) return of(dark, ensureContrast(c, dark ? c(0x211D1A) : c(0xF3ECE0), 3.0));
+            if (c != null) return of(dark, ensureContrast(c, dark ? c(0x0F1115) : c(0xF4F5F7), 3.0));
         }
         for (Accent a : ACCENTS) {
             if (a.key().equals(accentKey)) return of(dark, a.on(dark));
+        }
+        for (Accent a : ACCENTS) {
+            if (a.key().equals(DEFAULT_ACCENT)) return of(dark, a.on(dark));
         }
         return of(dark, ACCENTS.get(0).on(dark));
     }
@@ -67,14 +73,14 @@ public record Palette(boolean dark, Color paper, Color raised, Color high, Color
 
     // ---- derivados ----
 
-    /** Tinta con una opacidad dada (0–1): las líneas finas son tinta al 16 / 30 / 48 %. */
+    /** Tinta con una opacidad dada (0–1): los filetes son tinta al 10 / 16 / 30 %. */
     public Color inkAlpha(double a) {
         return alpha(ink, a);
     }
 
-    public Color line1() { return inkAlpha(0.16); }
-    public Color line2() { return inkAlpha(0.30); }
-    public Color line3() { return inkAlpha(0.48); }
+    public Color line1() { return inkAlpha(0.10); }
+    public Color line2() { return inkAlpha(0.16); }
+    public Color line3() { return inkAlpha(0.30); }
 
     /** Velo del acento (selección, chips). */
     public Color accentTint(double a) {

@@ -66,7 +66,7 @@ public class LoginDialog extends JDialog {
         create.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.accent");
         create.addActionListener(this::onNewVault);
 
-        JButton theme = Ui.iconButton(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18), "Cambiar entre Grafito y Washi", e -> {
+        JButton theme = Ui.iconButton(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18), "Cambiar entre oscuro y claro", e -> {
             ThemeManager.toggle();
             ((JButton) e.getSource()).setIcon(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18));
         });

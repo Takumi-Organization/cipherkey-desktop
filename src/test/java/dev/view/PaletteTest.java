@@ -6,7 +6,7 @@ import java.awt.Color;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Accesibilidad del tema: contraste WCAG AA de texto y acento en Grafito y Washi, con cada acento predefinido. */
+/** Accesibilidad del tema: contraste WCAG AA de texto y acento en oscuro y claro, con cada acento predefinido. */
 class PaletteTest {
     @Test
     void inkAndSecondaryTextMeetAaOnBothSurfaces() {
@@ -47,8 +47,8 @@ class PaletteTest {
 
     @Test
     void unknownOrInvalidAccentFallsBackToDefault() {
-        assertEquals(Palette.resolve(true, "bermellon", null).accent(), Palette.resolve(true, "nope", null).accent());
-        assertEquals(Palette.resolve(true, "bermellon", null).accent(), Palette.resolve(true, "custom", "zzz").accent());
+        assertEquals(Palette.resolve(true, Palette.DEFAULT_ACCENT, null).accent(), Palette.resolve(true, "nope", null).accent());
+        assertEquals(Palette.resolve(true, Palette.DEFAULT_ACCENT, null).accent(), Palette.resolve(true, "custom", "zzz").accent());
         assertNull(Palette.parseHex("12345"));
         assertEquals(new Color(0x12AB34), Palette.parseHex("#12ab34"));
         assertEquals("#12AB34", Palette.toHex(new Color(0x12AB34)));

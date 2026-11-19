@@ -3,7 +3,7 @@ package dev.view;
 import javax.swing.*;
 import java.awt.*;
 
-/** Aviso breve y no modal, en la parte inferior de la ventana: panel plano con barra de acento y entrada corta. */
+/** Aviso breve y no modal, en la parte inferior de la ventana: superficie de cristal (lo de debajo desenfocado) con un icono de acento. */
 public final class Toast {
     private static final String KEY = "ck.toast";
     private static final int DURATION_MS = 2400;
@@ -21,14 +21,13 @@ public final class Toast {
         }
 
         float[] progress = {0f};
+        java.awt.image.BufferedImage[] frost = {null};
         JPanel toast = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 11)) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = Draw.quality(g);
                 Palette p = Draw.p();
-                Draw.box(g2, p.raised(), p.line3(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
-                g2.setColor(p.accent());
-                g2.fillRect(0, 0, 4, getHeight());
+                Glass.paint(g2, p, frost[0], getWidth(), getHeight(), Draw.RADIUS);
                 g2.dispose();
             }
 
@@ -51,6 +50,8 @@ public final class Toast {
         int x = (layers.getWidth() - size.width) / 2;
         int rest = layers.getHeight() - size.height - 28;
         toast.setBounds(x, rest, size.width, size.height);
+        // captura de lo que queda debajo ANTES de añadir el aviso (si no, se desenfocaría a sí mismo)
+        frost[0] = Glass.frost(layers, new Rectangle(x, rest, size.width, size.height));
         layers.add(toast, JLayeredPane.POPUP_LAYER);
         layers.putClientProperty(KEY, toast);
         Motion.run(140, t -> {

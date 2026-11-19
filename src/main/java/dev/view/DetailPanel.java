@@ -65,7 +65,7 @@ public class DetailPanel extends JPanel {
         setPreferredSize(new Dimension(390, 0));
         totpTimer = new Timer(Motion.enabled() ? 100 : 1000, e -> tickTotp());
 
-        add(Art.panel(Art.Kind.SELECT, "00 // Selecciona una entrada"), "empty");
+        add(Art.panel(Art.Kind.SELECT, "Selecciona una entrada"), "empty");
         add(buildContent(), "content");
         cards.show(this, "empty");
     }
@@ -135,7 +135,7 @@ public class DetailPanel extends JPanel {
         buttons.add(delete);
 
         // 2FA: anillo + código grande
-        totpCode.setFont(Fonts.bold(26));
+        totpCode.setFont(Fonts.monoBold(26));
         JPanel totpBody = new JPanel(new BorderLayout(14, 0));
         totpBody.setOpaque(false);
         totpBody.add(totpRing, BorderLayout.WEST);
@@ -285,7 +285,7 @@ public class DetailPanel extends JPanel {
                 totpTimer.start();
             } catch (IllegalArgumentException ex) {
                 totpCode.setText("Clave no válida");
-                totpCode.setFont(Fonts.bold(14));
+                totpCode.setFont(Fonts.monoBold(14));
                 totpRing.setValue(0);
                 totpRing.setCenter("", "");
             }
@@ -301,7 +301,7 @@ public class DetailPanel extends JPanel {
         Instant now = Instant.now();
         String code = totp.code(now);
         int mid = code.length() / 2;
-        totpCode.setFont(Fonts.bold(26));
+        totpCode.setFont(Fonts.monoBold(26));
         totpCode.setText(code.substring(0, mid) + " " + code.substring(mid));
         long periodMs = totp.period() * 1000L;
         double left = 1 - (now.toEpochMilli() % periodMs) / (double) periodMs;

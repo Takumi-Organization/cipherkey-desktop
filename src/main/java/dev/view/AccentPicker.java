@@ -97,10 +97,10 @@ public class AccentPicker extends JPanel {
             boolean custom = i == Palette.ACCENTS.size();
             Color fill = custom ? Palette.resolve(p.dark(), "custom", AppPrefs.customAccent()).accent() : Palette.ACCENTS.get(i).on(p.dark());
             if (custom && !"custom".equals(AppPrefs.accent())) {
-                Draw.box(g2, null, p.line3(), x, y, SW, SW, 4);
+                Draw.box(g2, null, p.line3(), x, y, SW, SW, 14);
                 Draw.cross(g2, x + SW / 2, y + SW / 2, 5, p.dim());
             } else {
-                Draw.fillBox(g2, fill, x, y, SW, SW, 4);
+                Draw.fillBox(g2, fill, x, y, SW, SW, 14);
             }
             if (i == cur) {
                 g2.setColor(p.ink());

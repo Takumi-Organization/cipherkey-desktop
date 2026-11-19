@@ -30,7 +30,7 @@ public final class AppPrefs {
 
     /** Clave del acento: uno de los predefinidos o {@code custom} (con {@link #customAccent()}). */
     public static String accent() {
-        return node.get("accent", "bermellon");
+        return node.get("accent", "ambar");
     }
 
     public static void setAccent(String key) {

@@ -77,10 +77,10 @@ public class SettingsDialog extends JDialog {
     }
 
 
-    /** Dos botones conmutables: Grafito (oscuro) y Washi (claro). */
+    /** Dos botones conmutables: oscuro y claro. */
     private JComponent modeRow() {
-        JToggleButton graphite = new JToggleButton("Grafito • oscuro", Icons.get("moon", 16), ThemeManager.isDark());
-        JToggleButton washi = new JToggleButton("Washi • claro", Icons.get("sun", 16), !ThemeManager.isDark());
+        JToggleButton graphite = new JToggleButton("Oscuro", Icons.get("moon", 16), ThemeManager.isDark());
+        JToggleButton washi = new JToggleButton("Claro", Icons.get("sun", 16), !ThemeManager.isDark());
         ButtonGroup g = new ButtonGroup();
         g.add(graphite);
         g.add(washi);

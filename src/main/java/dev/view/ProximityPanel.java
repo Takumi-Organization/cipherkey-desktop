@@ -57,7 +57,7 @@ final class ProximityPanel extends JPanel {
 
         progress.setIndeterminate(true);
         progress.setVisible(false);
-        progress.putClientProperty(FlatClientProperties.STYLE, "arc: 0");
+        progress.putClientProperty(FlatClientProperties.STYLE, "arc: 999");
         JPanel south = new JPanel(new BorderLayout(0, 6));
         south.setOpaque(false);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));

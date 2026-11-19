@@ -72,7 +72,7 @@ final class SasDialog extends JDialog {
             int bw = 54, bh = 76, gap = 8, mid = 28;
             int total = 6 * bw + 4 * gap + mid;
             int x0 = (getWidth() - total) / 2, y = (getHeight() - bh) / 2;
-            g2.setFont(Fonts.bold(44));
+            g2.setFont(Fonts.monoBold(44));
             for (int i = 0; i < digits.length() && i < 6; i++) {
                 int x = x0 + i * (bw + gap) + (i >= 3 ? mid - gap : 0);
                 Draw.box(g2, p.raised(), p.accent(), x, y, bw, bh, Draw.RADIUS);

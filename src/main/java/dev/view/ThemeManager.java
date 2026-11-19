@@ -11,7 +11,7 @@ import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Tema Ryoku Kami sobre FlatLaf: Grafito/Washi + acento. La elección se guarda en {@link AppPrefs}. */
+/** Tema Ryoku Glass sobre FlatLaf: oscuro/claro + acento. La elección se guarda en {@link AppPrefs}. */
 public final class ThemeManager {
     private static Palette current = Palette.resolve(true, Palette.DEFAULT_ACCENT, null);
 
@@ -32,7 +32,7 @@ public final class ThemeManager {
         return current.dark();
     }
 
-    /** Cambia entre Grafito y Washi con la animación de FlatLaf. */
+    /** Cambia entre oscuro y claro con la animación de FlatLaf. */
     public static void toggle() {
         AppPrefs.setDark(!isDark());
         reapply();
@@ -51,7 +51,7 @@ public final class ThemeManager {
         boolean dark = AppPrefs.isDark();
         current = Palette.resolve(dark, AppPrefs.accent(), AppPrefs.customAccent());
         FlatLaf.setPreferredFontFamily(Fonts.install());
-        FlatLaf.setPreferredMonospacedFontFamily(Fonts.install());
+        FlatLaf.setPreferredMonospacedFontFamily(Fonts.mono(13).getFamily());
         UIManager.put("defaultFont", Fonts.regular(13));
         FlatLaf.setGlobalExtraDefaults(defaults(current));
         if (dark) FlatDarkLaf.setup();

@@ -25,7 +25,7 @@ public class PasswordView extends JPanel {
     }
 
     private int charWidth() {
-        return getFontMetrics(Fonts.bold(size)).charWidth('M');
+        return getFontMetrics(Fonts.monoBold(size)).charWidth('M');
     }
 
     private int perLine(int width) {
@@ -34,7 +34,7 @@ public class PasswordView extends JPanel {
 
     @Override
     public Dimension getPreferredSize() {
-        FontMetrics fm = getFontMetrics(Fonts.bold(size));
+        FontMetrics fm = getFontMetrics(Fonts.monoBold(size));
         int w = getWidth() > 0 ? getWidth() : 360;
         int lines = wrap ? Math.max(1, (int) Math.ceil(text.length() / (double) perLine(w))) : 1;
         return new Dimension(wrap ? 10 : 200, lines * (fm.getHeight() + 2));
@@ -44,7 +44,7 @@ public class PasswordView extends JPanel {
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = Draw.quality(g);
         Palette p = Draw.p();
-        g2.setFont(Fonts.bold(size));
+        g2.setFont(Fonts.monoBold(size));
         FontMetrics fm = g2.getFontMetrics();
         int cw = fm.charWidth('M');
         if (text.isEmpty()) {
