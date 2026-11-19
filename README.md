@@ -166,7 +166,7 @@ src/
 
 ## 4️⃣ Auditoría, importación y copias
 
-- **Auditoría** (barra lateral): lista las entradas con contraseñas débiles, repetidas, sin cambiar en más de un año o vacías; doble clic para ir a la entrada.
+- **Salud de la bóveda** (barra lateral, sección «Atención»): puntuación de 0 a 100, cobertura de 2FA y la lista de entradas con contraseñas débiles, repetidas, sin cambiar en más de un año o vacías; doble clic para ir a la entrada.
 - **⋯ → Importar desde CSV**: reconoce Bitwarden, Chrome/Edge/Firefox y KeePass por los nombres de columna y omite duplicados. Borra el CSV después: contiene contraseñas sin cifrar.
 - **⋯ → Exportar a CSV**: formato Bitwarden; avisa antes de escribir contraseñas en claro.
 - **⋯ → Copia de seguridad**: copia el `.ckey` (cifrado) donde elijas.
