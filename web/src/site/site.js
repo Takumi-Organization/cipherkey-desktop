@@ -25,7 +25,7 @@ function initGenerator() {
     const pw = chars.slice(0, L).join('');
     const bits = Math.round(L * Math.log2(pool.length));
     out.textContent = pw; lenV.textContent = L;
-    const [txt, col, pct] = bits < 40 ? ['Muy débil', '#d4483b', 15] : bits < 60 ? ['Débil', '#e0852b', 38] : bits < 80 ? ['Aceptable', '#d6b020', 60] : bits < 110 ? ['Fuerte', '#4aa564', 82] : ['Muy fuerte', '#1f9d6b', 100];
+    const [txt, col, pct] = bits < 40 ? ['Muy débil', '#b3261e', 15] : bits < 60 ? ['Débil', '#a8480c', 38] : bits < 80 ? ['Aceptable', '#8f5f00', 60] : bits < 110 ? ['Fuerte', '#1b6b49', 82] : ['Muy fuerte', '#1b6b49', 100];
     fill.style.width = pct + '%'; fill.style.background = col; mt.textContent = txt; mb.textContent = `~${bits} bits`;
   }
   Object.values(boxes).forEach((b) => b.addEventListener('change', generate));
