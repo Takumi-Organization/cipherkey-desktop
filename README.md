@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/Build-Maven-blue?style=for-the-badge"/>
   <img src="https://img.shields.io/badge/Tests-JUnit%206-red?style=for-the-badge"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Latest_Version-4.1.0-yellow?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Latest_Version-4.1.1-yellow?style=for-the-badge"/>
 </p>
 
 ---

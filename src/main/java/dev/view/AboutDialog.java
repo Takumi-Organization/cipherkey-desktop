@@ -12,7 +12,13 @@ public class AboutDialog extends JDialog {
 
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(24, 40, 22, 40));
-        body.centered(new JLabel(Icons.logo(230)), 0);
+        JPanel brand = new JPanel(new FlowLayout(FlowLayout.CENTER, 14, 0));
+        brand.setOpaque(false);
+        brand.add(new JLabel(new ImageIcon(Icons.appIcon().getScaledInstance(60, 60, Image.SCALE_SMOOTH))));
+        JLabel name = new JLabel("CipherKey");
+        name.setFont(Fonts.bold(30));
+        brand.add(name);
+        body.centered(brand, 0);
         body.centered(Ui.muted("Versión " + AppInfo.version()), 6);
         body.centered(new JLabel("Gestor de contraseñas local y cifrado"), 16);
         body.centered(Ui.muted("Argon2id • AES-256-GCM • sin conexión a red"), 10);

@@ -40,15 +40,9 @@ public final class Icons {
                 .setColorFilter(new FlatSVGIcon.ColorFilter(c -> color.get()));
     }
 
-    /** Imagen de la marca (escudo) para iconos de ventana. */
+    /** Icono de la marca (candado en baldosa Oro) para las ventanas; sale de packaging/icons/cipherkey.svg. */
     public static Image appIcon() {
         return new ImageIcon(Icons.class.getResource("/img/icon.png")).getImage();
-    }
-
-    public static ImageIcon logo(int width) {
-        ImageIcon raw = new ImageIcon(Icons.class.getResource("/img/logo.png"));
-        int height = raw.getIconHeight() * width / raw.getIconWidth();
-        return new ImageIcon(raw.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
     }
 
     /** Bloque plano de color con la inicial (estable por dominio; sin favicons ni peticiones de red). */
