@@ -3,14 +3,18 @@ package dev.view;
 import com.formdev.flatlaf.FlatClientProperties;
 import dev.model.PasswordEntry;
 import dev.security.Totp;
+import dev.security.VaultHealth;
 
 import javax.swing.*;
 import java.awt.*;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
-/** Panel derecho con los datos de la entrada seleccionada y sus acciones. */
+/** Panel derecho: ficha de la entrada en secciones (credenciales, 2FA, sitio, notas, registro) y sus acciones. */
 public class DetailPanel extends JPanel {
     /** Acciones que el panel delega en la ventana principal. */
     public interface Actions {
@@ -26,28 +30,29 @@ public class DetailPanel extends JPanel {
 
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.forLanguageTag("es"));
-    private static final String MASK = "••••••••••••";
 
     private final Actions actions;
     private final CardLayout cards = new CardLayout();
 
     private final JLabel avatar = new JLabel();
     private final JLabel title = new JLabel();
-    private final JLabel category = Ui.muted(" ");
+    private final JLabel subtitle = Ui.muted(" ");
     private final JButton favorite = Ui.iconButton(Icons.get("star", 18), "Marcar como favorita", e -> {});
+    private final Chips chips = new Chips();
     private final JLabel username = new JLabel();
-    private final JLabel password = new JLabel();
+    private final PasswordView password = new PasswordView(15, false);
     private final JButton reveal = Ui.iconButton(Icons.get("eye"), "Mostrar contraseña", e -> {});
     private final StrengthMeter meter = new StrengthMeter();
     private final JButton urlLink = new JButton();
     private final JTextArea notes = new JTextArea();
-    private final JLabel dates = Ui.muted(" ");
+    private final JLabel created = new JLabel(), modified = new JLabel();
+    private final JButton historyBtn = new JButton("Historial de contraseñas", Icons.get("clock"));
 
+    private final Ring totpRing = new Ring(52, 4, 15, 9);
     private final JLabel totpCode = new JLabel(" ");
-    private final JProgressBar totpBar = new JProgressBar(0, 100);
-    private final JPanel totpRow;
-    private final JButton historyBtn = new JButton("Historial", Icons.get("clock"));
-    private final Timer totpTimer = new Timer(1000, e -> tickTotp());
+    private final JPanel totpSection = new JPanel(new BorderLayout());
+    private final JPanel urlSection = new JPanel(new BorderLayout()), notesSection = new JPanel(new BorderLayout());
+    private final Timer totpTimer;
     private Totp totp;
 
     private boolean revealed;
@@ -57,23 +62,10 @@ public class DetailPanel extends JPanel {
         super(new BorderLayout());
         this.actions = actions;
         setLayout(cards);
-        setPreferredSize(new Dimension(340, 0));
+        setPreferredSize(new Dimension(390, 0));
+        totpTimer = new Timer(Motion.enabled() ? 100 : 1000, e -> tickTotp());
 
-        totpCode.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
-        totpBar.setPreferredSize(new Dimension(60, 5));
-        totpBar.setBorderPainted(false);
-        JPanel codeWithBar = new JPanel(new BorderLayout(0, 4));
-        codeWithBar.setOpaque(false);
-        codeWithBar.add(totpCode, BorderLayout.CENTER);
-        codeWithBar.add(totpBar, BorderLayout.SOUTH);
-        totpRow = field("Código 2FA", codeWithBar, Ui.iconButton(Icons.get("copy"), "Copiar código", e -> actions.copyTotp()));
-        historyBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        historyBtn.putClientProperty(FlatClientProperties.STYLE, "margin: 0,0,0,0");
-        historyBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        historyBtn.setFocusable(false);
-        historyBtn.addActionListener(e -> actions.showHistory());
-
-        add(buildEmpty(), "empty");
+        add(Art.panel(Art.Kind.SELECT, "00 // Selecciona una entrada"), "empty");
         add(buildContent(), "content");
         cards.show(this, "empty");
     }
@@ -87,38 +79,20 @@ public class DetailPanel extends JPanel {
     @Override
     protected void paintChildren(Graphics g) {
         super.paintChildren(g);
-        g.setColor(UIManager.getColor("App.card.border"));
-        g.fillRect(0, 0, 1, getHeight()); // filete que separa de la tabla
-    }
-
-    private JComponent buildEmpty() {
-        JPanel p = new JPanel(new GridBagLayout());
-        p.setOpaque(false);
-        JPanel box = new JPanel();
-        box.setOpaque(false);
-        box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
-        JLabel icon = new JLabel(Icons.get("key", 40));
-        JLabel text = Ui.muted("Selecciona una entrada para ver sus datos");
-        icon.setAlignmentX(CENTER_ALIGNMENT);
-        text.setAlignmentX(CENTER_ALIGNMENT);
-        box.add(icon);
-        box.add(Box.createVerticalStrut(10));
-        box.add(text);
-        p.add(box);
-        return p;
+        g.setColor(Draw.p().line1());
+        g.fillRect(0, 0, 1, getHeight()); // filete que separa de la lista
     }
 
     private JComponent buildContent() {
         VBox.Scrolling col = new VBox.Scrolling();
-        col.setBorder(BorderFactory.createEmptyBorder(24, 24, 20, 24));
+        col.setBorder(BorderFactory.createEmptyBorder(22, 22, 20, 22));
 
-        title.putClientProperty(FlatClientProperties.STYLE_CLASS, "h2");
+        title.setFont(Fonts.bold(20));
         favorite.addActionListener(e -> actions.toggleFavorite());
-
-        JPanel titles = new JPanel(new GridLayout(0, 1, 0, 2));
+        JPanel titles = new JPanel(new GridLayout(0, 1, 0, 3));
         titles.setOpaque(false);
         titles.add(title);
-        titles.add(category);
+        titles.add(subtitle);
         JPanel titlesWrap = new JPanel(new GridBagLayout());
         titlesWrap.setOpaque(false);
         titlesWrap.add(titles, new GridBagConstraints(0, 0, 1, 1, 1, 1, GridBagConstraints.WEST,
@@ -133,12 +107,11 @@ public class DetailPanel extends JPanel {
             revealed = !revealed;
             renderPassword();
         });
-        password.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
+        username.setFont(Fonts.regular(14));
 
         urlLink.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        urlLink.putClientProperty(FlatClientProperties.STYLE, "foreground: $Component.accentColor; margin: 0,0,0,0");
+        urlLink.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.accent; margin: 0,0,0,0");
         urlLink.setHorizontalAlignment(SwingConstants.LEFT);
-        urlLink.setFocusable(false);
         urlLink.addActionListener(e -> actions.openUrl());
 
         notes.setEditable(false);
@@ -146,27 +119,51 @@ public class DetailPanel extends JPanel {
         notes.setWrapStyleWord(true);
         notes.setOpaque(false);
         notes.setBorder(null);
+        notes.setFont(Fonts.regular(13));
 
-        JButton edit = new JButton("Editar", Icons.get("edit"));
-        edit.addActionListener(e -> actions.edit());
+        historyBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
+        historyBtn.putClientProperty(FlatClientProperties.STYLE, "margin: 4,0,4,0");
+        historyBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        historyBtn.addActionListener(e -> actions.showHistory());
+
+        JButton edit = Ui.primary("Editar", Icons.onAccent("edit", 16), e -> actions.edit());
+        edit.setToolTipText("Ctrl+E");
         JButton delete = Ui.danger("Eliminar", Icons.colored("trash", 16, () -> UIManager.getColor("App.danger")), e -> actions.delete());
         JPanel buttons = new JPanel(new GridLayout(1, 2, 10, 0));
         buttons.setOpaque(false);
         buttons.add(edit);
         buttons.add(delete);
 
+        // 2FA: anillo + código grande
+        totpCode.setFont(Fonts.bold(26));
+        JPanel totpBody = new JPanel(new BorderLayout(14, 0));
+        totpBody.setOpaque(false);
+        totpBody.add(totpRing, BorderLayout.WEST);
+        totpBody.add(totpCode, BorderLayout.CENTER);
+        totpBody.add(new CopyButton("Copiar código 2FA", actions::copyTotp), BorderLayout.EAST);
+        totpSection.setOpaque(false);
+        totpSection.add(box(null, totpBody), BorderLayout.CENTER);
+
+        urlSection.setOpaque(false);
+        urlSection.add(field("Sitio web", urlLink, Ui.iconButton(Icons.get("external-link", 16), "Abrir en el navegador", e -> actions.openUrl())),
+                BorderLayout.CENTER);
+        notesSection.setOpaque(false);
+        notesSection.add(box(null, notes), BorderLayout.CENTER);
+
         col.row(header, 0);
-        col.row(field("Usuario", username, Ui.iconButton(Icons.get("copy"), "Copiar usuario (Ctrl+U)", e -> actions.copyUsername())), 26);
-        col.row(field("Contraseña", password, reveal,
-                Ui.iconButton(Icons.get("copy"), "Copiar contraseña (Ctrl+B)", e -> actions.copyPassword())), 16);
-        col.row(meter, 2);
-        col.row(historyBtn, 4);
-        col.row(totpRow, 16);
-        col.row(field("Sitio web", urlLink, Ui.iconButton(Icons.get("external-link"), "Abrir en el navegador", e -> actions.openUrl())), 16);
-        col.row(field("Notas", notes), 16);
+        col.row(chips, 12);
+        col.row(Ui.section(0, "Credenciales"), 22);
+        col.row(field("Usuario", username, new CopyButton("Copiar usuario (Ctrl+U)", actions::copyUsername)), 8);
+        col.row(field("Contraseña", password, reveal, new CopyButton("Copiar contraseña (Ctrl+B)", actions::copyPassword)), 8);
+        col.row(meter, 10);
+        col.row(sectionWith(1, "Código 2FA", totpSection), 20);
+        col.row(sectionWith(2, "Sitio", urlSection), 20);
+        col.row(sectionWith(3, "Notas", notesSection), 20);
+        col.row(Ui.section(4, "Registro"), 20);
+        col.row(lines(), 8);
+        col.row(historyBtn, 2);
         col.glue();
-        col.row(dates, 16);
-        col.row(buttons, 14);
+        col.row(buttons, 18);
 
         JScrollPane scroll = new JScrollPane(col, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -176,23 +173,61 @@ public class DetailPanel extends JPanel {
         return scroll;
     }
 
-    /** Fila: etiqueta pequeña arriba, valor a la izquierda y botones de acción a la derecha. */
-    private static JPanel field(String label, JComponent value, JComponent... actionButtons) {
-        JPanel row = new JPanel(new BorderLayout(0, 4));
-        row.setOpaque(false);
-        row.add(Ui.muted(label), BorderLayout.NORTH);
-        JPanel line = new JPanel(new BorderLayout(4, 0));
-        line.setOpaque(false);
-        line.add(value, BorderLayout.CENTER);
-        JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
-        btns.setOpaque(false);
-        for (JComponent b : actionButtons) btns.add(b);
-        line.add(btns, BorderLayout.EAST);
-        row.add(line, BorderLayout.CENTER);
-        return row;
+    private JPanel lines() {
+        JPanel p = new JPanel(new GridLayout(0, 1, 0, 4));
+        p.setOpaque(false);
+        created.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
+        modified.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
+        p.add(created);
+        p.add(modified);
+        return p;
     }
 
-    public void show(PasswordEntry entry) {
+    private static JPanel sectionWith(int n, String name, JComponent body) {
+        JPanel p = new JPanel(new BorderLayout(0, 8));
+        p.setOpaque(false);
+        p.add(Ui.section(n, name), BorderLayout.NORTH);
+        p.add(body, BorderLayout.CENTER);
+        return p;
+    }
+
+    /** Marco plano de 1 px con relleno de papel (los datos van en «cajas» sobre el panel elevado). */
+    private static JPanel box(String label, JComponent value, JComponent... actionButtons) {
+        JPanel box = new JPanel(new BorderLayout(8, 0)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = Draw.quality(g);
+                Draw.box(g2, Draw.p().paper(), Draw.p().line2(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
+                g2.dispose();
+            }
+        };
+        box.setOpaque(false);
+        box.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 8));
+        JPanel center = new JPanel(new BorderLayout(0, 4));
+        center.setOpaque(false);
+        if (label != null) center.add(Ui.eyebrow(label), BorderLayout.NORTH);
+        JPanel valueWrap = new JPanel(new BorderLayout());
+        valueWrap.setOpaque(false);
+        valueWrap.add(value, BorderLayout.CENTER);
+        center.add(valueWrap, BorderLayout.CENTER);
+        box.add(center, BorderLayout.CENTER);
+        if (actionButtons.length > 0) {
+            JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
+            btns.setOpaque(false);
+            for (JComponent b : actionButtons) btns.add(b);
+            JPanel btnWrap = new JPanel(new GridBagLayout());
+            btnWrap.setOpaque(false);
+            btnWrap.add(btns);
+            box.add(btnWrap, BorderLayout.EAST);
+        }
+        return box;
+    }
+
+    private static JPanel field(String label, JComponent value, JComponent... actionButtons) {
+        return box(label, value, actionButtons);
+    }
+
+    public void show(PasswordEntry entry, VaultHealth.EntryHealth health) {
         current = entry;
         revealed = false;
         totpTimer.stop();
@@ -201,38 +236,58 @@ public class DetailPanel extends JPanel {
             cards.show(this, "empty");
             return;
         }
-        avatar.setIcon(new Icons.Avatar(entry.getTitle(), 44));
+        avatar.setIcon(new Icons.Avatar(entry.getTitle(), entry.getUrl(), 56));
         title.setText(entry.getTitle());
+        String site = Sites.domain(entry.getUrl());
         String cat = entry.getCategory();
-        category.setText(cat == null || cat.isBlank() ? "Sin categoría" : cat);
+        subtitle.setText(site.isEmpty() ? (cat == null || cat.isBlank() ? "Sin categoría" : cat) : site);
         favorite.setIcon(entry.isFavorite()
                 ? Icons.colored("star-filled", 18, () -> UIManager.getColor("App.warning"))
                 : Icons.get("star", 18));
         favorite.setToolTipText(entry.isFavorite() ? "Quitar de favoritas" : "Marcar como favorita");
+        favorite.getAccessibleContext().setAccessibleName(favorite.getToolTipText());
+
+        List<Chips.Spec> specs = new ArrayList<>();
+        Palette p = Draw.p();
+        if (cat != null && !cat.isBlank()) specs.add(new Chips.Spec(cat, p.dim(), p.line2(), null));
+        boolean hasTotp = entry.getTotpSecret() != null && !entry.getTotpSecret().isBlank();
+        if (hasTotp) specs.add(new Chips.Spec("2FA", p.secondary(), p.line2(), null));
+        if (health != null) {
+            if (health.has(VaultHealth.Flag.WEAK)) specs.add(new Chips.Spec("Débil", p.error(), p.error(), null));
+            if (health.has(VaultHealth.Flag.REUSED)) specs.add(new Chips.Spec("Repetida", p.warn(), p.warn(), null));
+            if (health.has(VaultHealth.Flag.OLD)) specs.add(new Chips.Spec("Antigua", p.muted(), p.line3(), null));
+        }
+        chips.set(specs);
+
         username.setText(orDash(entry.getUsername()));
         meter.update(entry.getPassword());
 
         boolean hasUrl = entry.getUrl() != null && !entry.getUrl().isBlank();
         urlLink.setText(hasUrl ? entry.getUrl() : "—");
-        urlLink.setEnabled(hasUrl);
+        urlSection.getParent().setVisible(hasUrl);
         boolean hasNotes = entry.getNotes() != null && !entry.getNotes().isBlank();
-        notes.setText(hasNotes ? entry.getNotes() : "—");
+        notes.setText(hasNotes ? entry.getNotes() : "");
+        notesSection.getParent().setVisible(hasNotes);
 
-        dates.setText("<html>Creada " + DATE_TIME.format(entry.getCreated()) + "<br>Modificada " + DATE_TIME.format(entry.getModified()) + "</html>");
+        LocalDateTime now = LocalDateTime.now();
+        created.setText("Creada     " + DATE_TIME.format(entry.getCreated()));
+        modified.setText("Modificada " + DATE_TIME.format(entry.getModified()) + "  •  " + When.relative(entry.getModified(), now));
         int historySize = entry.getHistory().size();
         historyBtn.setVisible(historySize > 0);
         historyBtn.setText("Historial de contraseñas (" + historySize + ")");
 
-        boolean hasTotp = entry.getTotpSecret() != null && !entry.getTotpSecret().isBlank();
-        totpRow.setVisible(hasTotp);
+        totpSection.getParent().setVisible(hasTotp);
         if (hasTotp) {
             try {
                 totp = Totp.parse(entry.getTotpSecret());
                 tickTotp();
+                totpTimer.setDelay(Motion.enabled() ? 100 : 1000);
                 totpTimer.start();
             } catch (IllegalArgumentException ex) {
                 totpCode.setText("Clave no válida");
-                totpBar.setValue(0);
+                totpCode.setFont(Fonts.bold(14));
+                totpRing.setValue(0);
+                totpRing.setCenter("", "");
             }
         }
         renderPassword();
@@ -246,10 +301,15 @@ public class DetailPanel extends JPanel {
         Instant now = Instant.now();
         String code = totp.code(now);
         int mid = code.length() / 2;
+        totpCode.setFont(Fonts.bold(26));
         totpCode.setText(code.substring(0, mid) + " " + code.substring(mid));
-        int remaining = totp.secondsRemaining(now);
-        totpBar.setValue(remaining * 100 / totp.period());
-        totpBar.setForeground(UIManager.getColor(remaining <= 5 ? "App.danger" : "Component.accentColor"));
+        long periodMs = totp.period() * 1000L;
+        double left = 1 - (now.toEpochMilli() % periodMs) / (double) periodMs;
+        int seconds = totp.secondsRemaining(now);
+        totpRing.setValue(Motion.enabled() ? left : seconds / (double) totp.period());
+        totpRing.setCenter(String.valueOf(seconds), "");
+        totpRing.setColor(seconds <= 5 ? Draw.p().error() : Draw.p().accent());
+        totpCode.setForeground(seconds <= 5 ? Draw.p().error() : Draw.p().ink());
     }
 
     @Override
@@ -259,10 +319,10 @@ public class DetailPanel extends JPanel {
     }
 
     private void renderPassword() {
-        boolean has = current != null && current.getPassword() != null && !current.getPassword().isEmpty();
-        password.setText(!has ? "—" : revealed ? current.getPassword() : MASK);
+        password.setPassword(current == null ? "" : current.getPassword(), revealed);
         reveal.setIcon(Icons.get(revealed ? "eye-off" : "eye"));
         reveal.setToolTipText(revealed ? "Ocultar contraseña" : "Mostrar contraseña");
+        reveal.getAccessibleContext().setAccessibleName(reveal.getToolTipText());
     }
 
     private static String orDash(String s) {

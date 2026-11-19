@@ -47,12 +47,18 @@ public class SettingsDialog extends JDialog {
 
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
-        body.row(Ui.title("Ajustes"), 0);
-        body.row(Ui.labeled("Bloquear tras inactividad", lockBox), 16);
-        body.row(new JSeparator(), 20);
-        JLabel sectionTitle = new JLabel("Cambiar clave maestra");
-        sectionTitle.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-        body.row(sectionTitle, 16);
+        JLabel heading = new JLabel("Ajustes");
+        heading.setFont(Fonts.bold(22));
+        body.row(Ui.section(0, "Apariencia"), 0);
+        body.row(heading, 6);
+        body.row(Ui.labeled("Tema", modeRow()), 16);
+        body.row(Ui.labeled("Color de acento", new AccentPicker(() -> { })), 14);
+        JCheckBox motion = new JCheckBox("Reducir movimiento (sin animaciones)", AppPrefs.reduceMotion());
+        motion.addActionListener(e -> AppPrefs.setReduceMotion(motion.isSelected()));
+        body.row(motion, 14);
+        body.row(Ui.section(1, "Seguridad"), 26);
+        body.row(Ui.labeled("Bloquear tras inactividad", lockBox), 12);
+        body.row(Ui.section(2, "Cambiar clave maestra"), 26);
         body.row(Ui.labeled("Clave actual", currentPwd), 12);
         body.row(Ui.labeled("Clave nueva", newPwd), 10);
         body.row(meter, 6);
@@ -65,11 +71,33 @@ public class SettingsDialog extends JDialog {
         body.row(Ui.buttonBar(close, change), 14);
 
         setContentPane(body);
-        setMinimumSize(new Dimension(440, 0));
+        setMinimumSize(new Dimension(500, 0));
         pack();
         setLocationRelativeTo(parent);
     }
 
+
+    /** Dos botones conmutables: Grafito (oscuro) y Washi (claro). */
+    private JComponent modeRow() {
+        JToggleButton graphite = new JToggleButton("Grafito • oscuro", Icons.get("moon", 16), ThemeManager.isDark());
+        JToggleButton washi = new JToggleButton("Washi • claro", Icons.get("sun", 16), !ThemeManager.isDark());
+        ButtonGroup g = new ButtonGroup();
+        g.add(graphite);
+        g.add(washi);
+        graphite.addActionListener(e -> setMode(true));
+        washi.addActionListener(e -> setMode(false));
+        JPanel p = new JPanel(new GridLayout(1, 2, 8, 0));
+        p.setOpaque(false);
+        p.add(graphite);
+        p.add(washi);
+        return p;
+    }
+
+    private static void setMode(boolean dark) {
+        if (dark == ThemeManager.isDark()) return;
+        AppPrefs.setDark(dark);
+        ThemeManager.reapply();
+    }
 
     private void changeMasterPassword() {
         char[] oldPwd = currentPwd.getPassword();

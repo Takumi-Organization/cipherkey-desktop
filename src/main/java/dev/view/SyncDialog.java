@@ -8,7 +8,6 @@ import dev.security.SecureClipboard;
 import dev.sync.SyncService;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.text.DateFormat;
 import java.util.Date;
@@ -33,10 +32,16 @@ public class SyncDialog extends JDialog {
         this.onDataChanged = onDataChanged;
         setContentPane(root);
         rebuild();
-        setMinimumSize(new Dimension(620, 560));
-        setPreferredSize(new Dimension(700, 680));
+        setMinimumSize(new Dimension(700, 600));
+        setPreferredSize(new Dimension(800, 780));
         pack();
         setLocationRelativeTo(parent);
+    }
+
+    private static JLabel heading(String text) {
+        JLabel l = new JLabel(text);
+        l.setFont(Fonts.bold(24));
+        return l;
     }
 
     private void rebuild() {
@@ -59,13 +64,11 @@ public class SyncDialog extends JDialog {
 
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
-        body.row(Ui.title("Sincronización"), 0);
+        body.row(heading("Sincronización"), 0);
         body.row(Ui.muted("Entre tus dispositivos en la misma red no hace falta ningún servidor."), 4);
         body.row(new ProximityPanel(this, sync, onDataChanged), 10);
         body.row(new JSeparator(), 16);
-        JLabel srv = new JLabel("Servidor de sincronización (opcional)");
-        srv.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-        body.row(srv, 12);
+        body.row(Ui.section(1, "Servidor de sincronización (opcional)"), 12);
         body.row(Ui.muted("Para sincronizar fuera de tu red. Tus contraseñas se cifran en este equipo; el servidor solo guarda datos cifrados."), 4);
         body.row(Ui.labeled("Dirección del servidor (HTTPS)", url), 12);
         body.row(Ui.labeled("Nombre de este dispositivo", name), 10);
@@ -77,9 +80,7 @@ public class SyncDialog extends JDialog {
         });
         body.row(Ui.buttonBar(create), 12);
         body.row(new JSeparator(), 16);
-        JLabel s = new JLabel("¿Ya sincronizas otro dispositivo?");
-        s.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-        body.row(s, 12);
+        body.row(Ui.section(2, "¿Ya sincronizas otro dispositivo?"), 12);
         body.row(Ui.labeled("Código de emparejamiento", code), 8);
         JButton pair = new JButton("Vincular con este código");
         pair.addActionListener(e -> run("Vinculando…", () -> { sync.pair(code.getText(), name.getText().trim()); return null; },
@@ -97,17 +98,18 @@ public class SyncDialog extends JDialog {
         SyncService.Status st = sync.status();
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
-        body.row(Ui.title("Sincronización"), 0);
+        body.row(heading("Sincronización"), 0);
         String last = st.lastSyncMillis() == 0 ? "aún no" : DateFormat.getDateTimeInstance().format(new Date(st.lastSyncMillis()));
-        String route = sync.lastRoute().isEmpty() ? "" : "  ·  Vía: " + sync.lastRoute();
-        body.row(Ui.muted("Última sincronización: " + last + "  ·  Pendientes: " + st.pending() + "  ·  Conflictos: " + st.conflicts() + route), 4);
+        String route = sync.lastRoute().isEmpty() ? "" : "  •  Vía: " + sync.lastRoute();
+        body.row(Ui.muted("Última sincronización: " + last + "  •  Pendientes: " + st.pending() + "  •  Conflictos: " + st.conflicts() + route), 4);
         if (st.error() != null) {
-            JLabel err = new JLabel("⚠ " + st.error());
+            JLabel err = new JLabel(st.error(), Icons.colored("alert", 14, () -> Draw.p().error()), SwingConstants.LEADING);
+            err.setIconTextGap(8);
             err.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
             body.row(err, 4);
         }
 
-        JButton now = Ui.primary("Sincronizar ahora", Icons.white("refresh", 16), e -> run("Sincronizando…",
+        JButton now = Ui.primary("Sincronizar ahora", Icons.onAccent("refresh", 16), e -> run("Sincronizando…",
                 () -> sync.syncNow(), r -> { onDataChanged.run(); rebuild(); }));
         JButton pairCode = new JButton("Vincular otro dispositivo…");
         pairCode.addActionListener(e -> run("Generando código…", sync::newPairingCode, this::showPairingCode));
@@ -121,22 +123,20 @@ public class SyncDialog extends JDialog {
         body.row(Ui.buttonBar(off, pairCode, now), 14);
 
         // dispositivos
-        JLabel dt = new JLabel("Dispositivos del servidor");
-        dt.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-        body.row(dt, 14);
-        DefaultTableModel model = new DefaultTableModel(new Object[]{"Nombre", "Alta", "Última vez", "Estado"}, 0) {
-            public boolean isCellEditable(int r, int c) { return false; }
-        };
-        JTable table = new JTable(model);
-        table.setRowHeight(24);
+        body.row(Ui.section(1, "Dispositivos del servidor"), 18);
+        DeviceList table = new DeviceList("Dispositivos del servidor");
         JScrollPane sp = new JScrollPane(table);
-        sp.setPreferredSize(new Dimension(500, 110));
-        body.row(sp, 6);
+        sp.setBorder(null);
+        sp.setOpaque(false);
+        sp.getViewport().setOpaque(false);
+        table.setOpaque(false);
+        sp.setPreferredSize(new Dimension(500, 150));
+        body.row(sp, 8);
         List<ServerClient.DeviceInfo>[] devices = new List[]{List.of()};
         String[] self = {""};
         JButton revoke = new JButton("Revocar dispositivo seleccionado");
         revoke.addActionListener(e -> {
-            int i = table.getSelectedRow();
+            int i = table.getSelectedIndex();
             if (i < 0) return;
             ServerClient.DeviceInfo d = devices[0].get(i);
             if (d.revoked()) return;
@@ -146,15 +146,13 @@ public class SyncDialog extends JDialog {
             }
         });
         body.row(Ui.buttonBar(revoke), 4);
-        loadDevices(model, devices, self);
-        body.row(new ProximityPanel(this, sync, onDataChanged), 14);
+        loadDevices(table, devices, self);
+        body.row(new ProximityPanel(this, sync, onDataChanged), 22);
 
         // conflictos
         List<Record> conflicts = sync.conflicts();
         if (!conflicts.isEmpty()) {
-            JLabel ct = new JLabel("Conflictos por resolver (" + conflicts.size() + ")");
-            ct.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-            body.row(ct, 14);
+            body.row(Ui.section(3, "Conflictos por resolver (" + conflicts.size() + ")"), 22);
             JList<String> list = new JList<>(conflicts.stream().map(r -> r.title.isEmpty() ? "(sin título)" : r.title).toArray(String[]::new));
             list.setVisibleRowCount(4);
             JTextArea diff = new JTextArea(6, 40);
@@ -180,7 +178,7 @@ public class SyncDialog extends JDialog {
         return body;
     }
 
-    private void loadDevices(DefaultTableModel model, List<ServerClient.DeviceInfo>[] holder, String[] self) {
+    private void loadDevices(DeviceList model, List<ServerClient.DeviceInfo>[] holder, String[] self) {
         SwingWorker<Object[], Void> w = new SwingWorker<>() {
             protected Object[] doInBackground() throws Exception { return new Object[]{sync.devices(), sync.thisDeviceId()}; }
             @SuppressWarnings("unchecked")
@@ -190,12 +188,18 @@ public class SyncDialog extends JDialog {
                     holder[0] = (List<ServerClient.DeviceInfo>) r[0];
                     self[0] = (String) r[1];
                     DateFormat f = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+                    Palette pal = Draw.p();
+                    List<DeviceList.Item> items = new java.util.ArrayList<>();
                     for (ServerClient.DeviceInfo d : holder[0]) {
-                        model.addRow(new Object[]{d.name() + (d.deviceId().equals(self[0]) ? " (este)" : ""), f.format(new Date(d.createdAt())),
-                                d.lastSeen() == 0 ? "—" : f.format(new Date(d.lastSeen())), d.revoked() ? "Revocado" : "Activo"});
+                        List<Chips.Spec> chips = new java.util.ArrayList<>();
+                        if (d.deviceId().equals(self[0])) chips.add(new Chips.Spec("Este equipo", pal.onAccent(), pal.accent(), pal.accent()));
+                        chips.add(d.revoked() ? new Chips.Spec("Revocado", pal.error(), pal.error(), null) : new Chips.Spec("Activo", pal.ok(), pal.ok(), null));
+                        items.add(new DeviceList.Item(d.deviceId().equals(self[0]) ? "key" : "smartphone", d.name(), "alta " + f.format(new Date(d.createdAt())),
+                                chips, d.lastSeen() == 0 ? "sin actividad" : "visto " + f.format(new Date(d.lastSeen()))));
                     }
+                    model.setItems(items);
                 } catch (Exception e) {
-                    model.addRow(new Object[]{"No se pudo consultar el servidor", "", "", ""});
+                    model.setEmptyText("No se pudo consultar el servidor");
                 }
             }
         };

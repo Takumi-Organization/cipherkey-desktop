@@ -57,7 +57,7 @@ public class HistoryDialog extends JDialog {
         });
         JButton copy = Ui.iconButton(Icons.get("copy"), "Copiar", e -> {
             SecureClipboard.copyToClipboard(item.getPassword());
-            Toast.show(this, "Copiada · se borrará en 30 s");
+            Toast.show(this, "Copiada • se borrará en 30 s");
         });
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));

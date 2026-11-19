@@ -24,6 +24,19 @@ public final class Ui {
         return l;
     }
 
+    /** Micro-etiqueta: mayúsculas, negrita, espaciado .08em (etiquetas de campo y de sección). */
+    public static JLabel eyebrow(String text) {
+        JLabel l = new JLabel(text.toUpperCase());
+        l.setFont(Draw.label());
+        l.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
+        return l;
+    }
+
+    /** Marcador de sección: «00 // TÍTULO». */
+    public static JLabel section(int n, String text) {
+        return eyebrow(String.format("%02d // %s", n, text));
+    }
+
     /** Botón con icono, sin borde, para barras de herramientas y acciones inline. */
     public static JButton iconButton(Icon icon, String tooltip, ActionListener action) {
         JButton b = new JButton(icon);
@@ -37,15 +50,16 @@ public final class Ui {
     public static JButton primary(String text, Icon icon, ActionListener action) {
         JButton b = new JButton(text, icon);
         b.putClientProperty(FlatClientProperties.STYLE,
-                "background: $Component.accentColor; foreground: #fff; borderWidth: 0; focusWidth: 0;"
-                        + "hoverBackground: lighten($Component.accentColor,6%); pressedBackground: darken($Component.accentColor,6%)");
+                "background: $Button.default.background; foreground: $Button.default.foreground; borderWidth: 0;"
+                        + "hoverBackground: $Button.default.hoverBackground; pressedBackground: $Button.default.pressedBackground;"
+                        + "font: bold");
         b.addActionListener(action);
         return b;
     }
 
     public static JButton danger(String text, Icon icon, ActionListener action) {
         JButton b = new JButton(text, icon);
-        b.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
+        b.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger; borderColor: $App.danger");
         b.addActionListener(action);
         return b;
     }
@@ -54,7 +68,7 @@ public final class Ui {
     public static JPanel labeled(String label, JComponent component) {
         JPanel p = new JPanel(new BorderLayout(0, 4));
         p.setOpaque(false);
-        p.add(muted(label), BorderLayout.NORTH);
+        p.add(eyebrow(label), BorderLayout.NORTH);
         p.add(component, BorderLayout.CENTER);
         return p;
     }

@@ -4,7 +4,6 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.geom.Ellipse2D;
 import java.util.function.Supplier;
 
 /** Iconos SVG (carpeta resources/icons) recoloreados según el tema activo. */
@@ -26,8 +25,13 @@ public final class Icons {
         return colored(name, size, () -> UIManager.getColor("Component.accentColor"));
     }
 
-    public static Icon white(String name, int size) {
-        return colored(name, size, () -> Color.WHITE);
+    /** Icono del color del texto sobre el acento (botón principal). */
+    public static Icon onAccent(String name, int size) {
+        return colored(name, size, () -> UIManager.getColor("App.onAccent"));
+    }
+
+    public static Icon ink(String name, int size) {
+        return colored(name, size, () -> UIManager.getColor("Label.foreground"));
     }
 
     public static Icon colored(String name, int size, Supplier<Color> color) {
@@ -47,34 +51,39 @@ public final class Icons {
         return new ImageIcon(raw.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
     }
 
-    /** Círculo de color con la inicial, para identificar cada entrada. */
+    /** Bloque plano de color con la inicial (estable por dominio; sin favicons ni peticiones de red). */
     public static final class Avatar implements Icon {
+        /** Tonos tierra y agua, todos claros: la inicial va siempre en tinta oscura (contraste > 7:1). */
         private static final Color[] PALETTE = {
-                new Color(0x1B8AC9), new Color(0x7C5CFC), new Color(0xE0557A), new Color(0xE58A1F),
-                new Color(0x2FA37C), new Color(0x4F6BED), new Color(0xC9573B), new Color(0x8E5BA8)};
+                new Color(0xD9A441), new Color(0x8FBDD1), new Color(0x7FD0AE), new Color(0xE08A6B),
+                new Color(0xCBB89A), new Color(0xD98BA3), new Color(0xA3B565), new Color(0x9AA7B8)};
+        private static final Color INK = new Color(0x211D1A);
 
         private final String letter;
         private final Color color;
         private final int size;
 
         public Avatar(String title, int size) {
-            String t = title == null ? "" : title.trim();
-            this.letter = t.isEmpty() ? "?" : t.substring(0, t.offsetByCodePoints(0, 1)).toUpperCase();
-            this.color = PALETTE[Math.floorMod(t.toLowerCase().hashCode(), PALETTE.length)];
+            this(title, null, size);
+        }
+
+        public Avatar(String title, String url, int size) {
+            this.letter = Sites.initial(title, url);
+            this.color = colorFor(Sites.colorKey(title, url));
             this.size = size;
+        }
+
+        public static Color colorFor(String key) {
+            return PALETTE[Math.floorMod(key.hashCode(), PALETTE.length)];
         }
 
         @Override
         public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g2.setColor(color);
-            g2.fill(new Ellipse2D.Float(x, y, size, size));
-            g2.setColor(Color.WHITE);
-            g2.setFont(c.getFont().deriveFont(Font.BOLD, size * 0.45f));
-            FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(letter, x + (size - fm.stringWidth(letter)) / 2f, y + (size + fm.getAscent() - fm.getDescent()) / 2f);
+            Graphics2D g2 = Draw.quality(g);
+            Draw.fillBox(g2, color, x, y, size, size, Draw.RADIUS);
+            g2.setColor(INK);
+            g2.setFont(Fonts.bold(size * 0.46f));
+            Draw.centeredText(g2, letter, x, y, size, size);
             g2.dispose();
         }
 

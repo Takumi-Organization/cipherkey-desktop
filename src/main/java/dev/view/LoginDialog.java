@@ -56,39 +56,45 @@ public class LoginDialog extends JDialog {
         errorLabel.putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
         if (error != null) errorLabel.setText(error);
 
-        JButton unlock = Ui.primary("Desbloquear", Icons.white("lock", 16), this::onOk);
+        JButton unlock = Ui.primary("Desbloquear", Icons.onAccent("lock", 16), this::onOk);
         unlock.putClientProperty(FlatClientProperties.STYLE_CLASS, "large");
+        unlock.putClientProperty(FlatClientProperties.STYLE, unlock.getClientProperty(FlatClientProperties.STYLE) + "; minimumHeight: 44");
         getRootPane().setDefaultButton(unlock);
 
         JButton create = new JButton("Crear una bóveda nueva");
         create.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        create.putClientProperty(FlatClientProperties.STYLE, "foreground: $Component.accentColor");
+        create.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.accent");
         create.addActionListener(this::onNewVault);
 
-        JLabel logo = new JLabel(Icons.logo(250));
-        JLabel tagline = Ui.muted("Tu bóveda cifrada · 100 % offline");
-
-        JButton theme = Ui.iconButton(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18), "Cambiar tema", e -> {
+        JButton theme = Ui.iconButton(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18), "Cambiar entre Grafito y Washi", e -> {
             ThemeManager.toggle();
             ((JButton) e.getSource()).setIcon(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18));
         });
-        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        topBar.setOpaque(false);
-        topBar.add(theme);
+        JPanel look = new JPanel(new BorderLayout(10, 0));
+        look.setOpaque(false);
+        look.add(new AccentPicker(() -> theme.setIcon(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18))), BorderLayout.WEST);
+        look.add(theme, BorderLayout.EAST);
 
-        VBox body = new VBox();
-        body.setBorder(BorderFactory.createEmptyBorder(10, 34, 26, 34));
-        body.row(topBar, 0);
-        body.centered(logo, 0);
-        body.centered(tagline, 2);
-        body.row(Ui.labeled("Bóveda", pathRow), 26);
-        body.row(Ui.labeled("Contraseña maestra", passwordField), 14);
-        body.row(errorLabel, 6);
-        body.row(unlock, 10);
-        body.centered(create, 8);
+        JLabel heading = new JLabel("Desbloquea tu bóveda");
+        heading.setFont(Fonts.bold(24));
 
-        setContentPane(body);
-        setPreferredSize(new Dimension(460, getPreferredSize().height));
+        VBox form = new VBox();
+        form.setBorder(BorderFactory.createEmptyBorder(34, 40, 26, 40));
+        form.row(Ui.section(0, "Acceso"), 0);
+        form.row(heading, 8);
+        form.row(Ui.labeled("Bóveda", pathRow), 26);
+        form.row(Ui.labeled("Contraseña maestra", passwordField), 14);
+        form.row(errorLabel, 8);
+        form.row(unlock, 8);
+        form.centered(create, 8);
+        form.glue();
+        form.row(Ui.labeled("Apariencia", look), 12);
+
+        JPanel content = new JPanel(new BorderLayout());
+        content.add(new ArtSide(), BorderLayout.WEST);
+        content.add(form, BorderLayout.CENTER);
+        setContentPane(content);
+        setPreferredSize(new Dimension(840, 500));
         pack();
         setLocationRelativeTo(parent);
 
@@ -102,6 +108,38 @@ public class LoginDialog extends JDialog {
     }
 
 
+
+    /** Lado izquierdo: marca, ilustración «plano a tinta» y lema. */
+    private static final class ArtSide extends JComponent {
+        ArtSide() {
+            setPreferredSize(new Dimension(340, 500));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = Draw.quality(g);
+            Palette p = Draw.p();
+            int w = getWidth(), h = getHeight();
+            g2.setColor(p.raised());
+            g2.fillRect(0, 0, w, h);
+            Art.backdrop(g2, 0, 0, w, h, w - 70, 150, 110);
+            Art.window(g2, Art.Kind.LOCK, 52, 150, 220, 170);
+            Draw.cross(g2, 30, 126, 6, p.ink());
+            Draw.cross(g2, w - 34, 350, 6, p.ink());
+            Draw.fillBox(g2, p.accent(), 36, 34, 30, 30, Draw.RADIUS);
+            Icons.onAccent("lock", 16).paintIcon(this, g2, 43, 41);
+            g2.setColor(p.ink());
+            g2.setFont(Fonts.bold(22));
+            g2.drawString("CipherKey", 78, 56);
+            g2.setFont(Draw.label());
+            g2.setColor(p.muted());
+            g2.drawString("TU BÓVEDA CIFRADA", 36, h - 62);
+            g2.drawString("100 % OFFLINE  •  SIN NUBE", 36, h - 44);
+            g2.setColor(p.line1());
+            g2.fillRect(w - 1, 0, 1, h);
+            g2.dispose();
+        }
+    }
 
     private String pathText() {
         Object item = pathBox.getEditor().getItem();
@@ -144,7 +182,7 @@ public class LoginDialog extends JDialog {
             errorLabel.setText(" ");
             passwordField.setText("");
             passwordField.requestFocusInWindow();
-            Toast.show(this, "Bóveda creada · introduce tu clave para entrar");
+            Toast.show(this, "Bóveda creada • introduce tu clave para entrar");
         } catch (VaultException ex) {
             errorLabel.setText("No se pudo crear la bóveda: " + ex.getMessage());
         } finally {

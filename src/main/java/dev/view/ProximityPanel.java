@@ -20,47 +20,50 @@ final class ProximityPanel extends JPanel {
     private final Component owner;
     private final SyncService sync;
     private final Runnable onDataChanged;
-    private final DefaultTableModel model = new DefaultTableModel(new Object[]{"Dispositivo", "Estado", "Última sincronización", "Vinculado", "Dirección"}, 0) {
-        public boolean isCellEditable(int r, int c) { return false; }
-    };
-    private final JTable table = new JTable(model);
+    private final DeviceList devices = new DeviceList("Dispositivos cercanos y vinculados");
     private final JLabel status = new JLabel(" ");
     private final JProgressBar progress = new JProgressBar();
-    private final JButton syncOne = new JButton("Sincronizar con este");
+    private final JButton syncOne = Ui.primary("Sincronizar con este", Icons.onAccent("refresh", 16), e -> {});
     private final JButton link = new JButton("Vincular por proximidad…");
     private final JButton allow = new JButton("Permitir vinculación");
     private final JButton unlink = new JButton("Desvincular");
     private final JButton retry = new JButton("Reintentar");
+    private final Banner banner = new Banner();
     private volatile List<ProximityService.Row> rows = List.of();
     private final Timer timer;
 
     ProximityPanel(Component owner, SyncService sync, Runnable onDataChanged) {
-        super(new BorderLayout(0, 6));
+        super(new BorderLayout(0, 10));
         this.owner = owner; this.sync = sync; this.onDataChanged = onDataChanged;
         setOpaque(false);
-        JLabel title = new JLabel("Dispositivos cercanos");
-        title.putClientProperty(FlatClientProperties.STYLE_CLASS, "h4");
-        JLabel help = new JLabel("<html>Sincroniza directamente por la red local, sin servidor. Para vincular un dispositivo nuevo: en uno pulsa "
-                + "«Permitir vinculación» y en el otro «Vincular por proximidad…»; compara el código de 6 dígitos en las dos pantallas. "
+        JLabel help = new JLabel("<html>Sincroniza directamente por la red local, sin servidor. Para vincular un equipo nuevo: en uno pulsa "
+                + "«Permitir vinculación» y en el otro «Vincular por proximidad…»; compara el código de 6 cifras en las dos pantallas. "
                 + "Puertos: 47890/tcp y 47891/udp.</html>");
-        help.putClientProperty(FlatClientProperties.STYLE, "foreground: $Label.disabledForeground");
-        JPanel head = new JPanel(new BorderLayout(0, 2));
+        help.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
+        JPanel head = new JPanel(new BorderLayout(0, 6));
         head.setOpaque(false);
-        head.add(title, BorderLayout.NORTH);
+        head.add(Ui.section(0, "Dispositivos cercanos"), BorderLayout.NORTH);
         head.add(help, BorderLayout.CENTER);
+        head.add(banner, BorderLayout.SOUTH);
         add(head, BorderLayout.NORTH);
-        table.setRowHeight(24);
-        JScrollPane sp = new JScrollPane(table);
-        sp.setPreferredSize(new Dimension(560, 130));
+
+        JScrollPane sp = new JScrollPane(devices);
+        sp.setBorder(null);
+        sp.getViewport().setOpaque(false);
+        sp.setOpaque(false);
+        devices.setOpaque(false);
+        devices.setEmptyText("Buscando dispositivos CipherKey en la red local…");
         add(sp, BorderLayout.CENTER);
 
         progress.setIndeterminate(true);
         progress.setVisible(false);
-        JPanel south = new JPanel(new BorderLayout(0, 4));
+        progress.putClientProperty(FlatClientProperties.STYLE, "arc: 0");
+        JPanel south = new JPanel(new BorderLayout(0, 6));
         south.setOpaque(false);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         buttons.setOpaque(false);
         buttons.add(retry); buttons.add(unlink); buttons.add(allow); buttons.add(link); buttons.add(syncOne);
+        status.setFont(Fonts.regular(12));
         south.add(status, BorderLayout.NORTH);
         south.add(progress, BorderLayout.CENTER);
         south.add(buttons, BorderLayout.SOUTH);
@@ -69,9 +72,9 @@ final class ProximityPanel extends JPanel {
         syncOne.addActionListener(e -> syncSelected());
         link.addActionListener(e -> linkDialog());
         allow.addActionListener(e -> allowPairing());
-        retry.addActionListener(e -> { status.setText("Reintentando…"); work("Reintentando…", () -> sync.retryProximity(), x -> { }); });
+        retry.addActionListener(e -> { setStatus("Reintentando…", false); work("Reintentando…", () -> sync.retryProximity(), x -> { }); });
         unlink.addActionListener(e -> unlinkSelected());
-        table.getSelectionModel().addListSelectionListener(e -> updateButtons());
+        devices.addListSelectionListener(e -> updateButtons());
         updateButtons();
 
         timer = new Timer(3000, e -> refresh());
@@ -84,10 +87,46 @@ final class ProximityPanel extends JPanel {
         super.removeNotify();
     }
 
+    /** Línea de estado: los avisos llevan icono de alerta además del color. */
+    private void setStatus(String text, boolean problem) {
+        status.setText(text);
+        status.setIcon(problem ? Icons.colored("alert", 14, () -> Draw.p().error()) : null);
+        status.setIconTextGap(8);
+        status.setForeground(problem ? Draw.p().error() : Draw.p().dim());
+    }
+
+    /** Aviso de «vinculación permitida» con la dirección para el otro equipo. */
+    private static final class Banner extends JComponent {
+        private String text;
+
+        void show(String text) {
+            this.text = text;
+            setPreferredSize(new Dimension(10, text == null ? 0 : 40));
+            setVisible(text != null);
+            revalidate();
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            if (text == null) return;
+            Graphics2D g2 = Draw.quality(g);
+            Palette p = Draw.p();
+            Draw.box(g2, p.accentTint(0.10), p.accent(), 0, 4, getWidth(), getHeight() - 8, Draw.RADIUS);
+            g2.setColor(p.accent());
+            g2.fillRect(0, 4, 4, getHeight() - 8);
+            g2.setFont(Fonts.bold(12));
+            g2.setColor(p.ink());
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(Draw.ellipsize(text, fm, getWidth() - 28), 16, Draw.baseline(fm, 0, getHeight()));
+            g2.dispose();
+        }
+    }
+
     private ProximityService prox() { return sync.proximity(); }
 
     private ProximityService.Row selected() {
-        int i = table.getSelectedRow();
+        int i = devices.getSelectedIndex();
         return i < 0 || i >= rows.size() ? null : rows.get(i);
     }
 
@@ -101,7 +140,7 @@ final class ProximityPanel extends JPanel {
         retry.setVisible(!has && sync.proximityError() != null);
         if (!has && !busy) {
             String e = sync.proximityError();
-            status.setText(e != null ? "⚠ " + e : "La sincronización por proximidad se está iniciando…");
+            setStatus(e != null ? e : "La sincronización por proximidad se está iniciando…", e != null);
         }
     }
 
@@ -121,20 +160,35 @@ final class ProximityPanel extends JPanel {
                     rows = get();
                     ProximityService.Row keep = selected();
                     String keepId = keep == null ? null : keep.deviceId();
-                    model.setRowCount(0);
                     DateFormat f = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+                    Palette pal = Draw.p();
+                    List<DeviceList.Item> items = new java.util.ArrayList<>();
                     int sel = -1, i = 0;
                     for (ProximityService.Row r : rows) {
-                        model.addRow(new Object[]{r.name(), label(r.state()), r.lastSyncMillis() == 0 ? "—" : f.format(new Date(r.lastSyncMillis())),
-                                r.linked() ? "Sí" : "No", r.address()});
+                        List<Chips.Spec> chips = new java.util.ArrayList<>();
+                        switch (r.state()) {
+                            case NEARBY -> chips.add(new Chips.Spec("Cercano", pal.onAccent(), pal.accent(), pal.accent()));
+                            case ONLINE -> chips.add(new Chips.Spec("En línea", pal.ok(), pal.ok(), null));
+                            case OFFLINE -> chips.add(new Chips.Spec("Desconectado", pal.muted(), pal.line3(), null));
+                        }
+                        if (r.linked()) chips.add(new Chips.Spec("Vinculado", pal.secondary(), pal.secondary(), null));
+                        String meta = (r.address().isEmpty() ? "sin dirección" : r.address());
+                        items.add(new DeviceList.Item(r.linked() ? "shield-check" : "smartphone", r.name(), meta, chips,
+                                r.lastSyncMillis() == 0 ? "sin sincronizar" : "sincronizado " + f.format(new Date(r.lastSyncMillis()))));
                         if (r.deviceId().equals(keepId)) sel = i;
                         i++;
                     }
-                    if (sel >= 0) table.setRowSelectionInterval(sel, sel);
+                    devices.setItems(items);
+                    if (sel >= 0) devices.setSelectedIndex(sel);
                     String err = p.lastError();
                     String disc = p.discoveryError();
-                    if (!busy) status.setText(err != null ? "⚠ " + err : (p.pairingOpen() ? "Vinculación permitida: el otro dispositivo ya puede conectarse."
-                            : disc != null ? "⚠ " + disc : rows.isEmpty() ? "Buscando dispositivos CipherKey en la red local…" : " "));
+                    banner.show(p.pairingOpen() ? "VINCULACIÓN PERMITIDA • el otro equipo ya puede conectarse a "
+                            + java.util.Objects.requireNonNullElse(localAddress(), "esta IP") + ":" + p.port() : null);
+                    if (!busy) {
+                        if (err != null) setStatus(err, true);
+                        else if (disc != null) setStatus(disc, true);
+                        else setStatus(rows.isEmpty() ? "Buscando dispositivos CipherKey en la red local…" : " ", false);
+                    }
                     updateButtons();
                 } catch (Exception ignored) { }
             }
@@ -142,15 +196,11 @@ final class ProximityPanel extends JPanel {
         w.execute();
     }
 
-    private static String label(ProximityService.State s) {
-        return switch (s) { case NEARBY -> "Cercano"; case ONLINE -> "En línea"; case OFFLINE -> "Desconectado"; };
-    }
-
     private volatile boolean busy;
 
     private <T> void work(String label, Callable<T> task, java.util.function.Consumer<T> ok) {
         busy = true;
-        status.setText(label);
+        setStatus(label, false);
         progress.setVisible(true);
         setEnabledAll(false);
         SwingWorker<T, Void> w = new SwingWorker<>() {
@@ -163,7 +213,7 @@ final class ProximityPanel extends JPanel {
                     ok.accept(get());
                 } catch (Exception e) {
                     Throwable c = e.getCause() != null ? e.getCause() : e;
-                    status.setText("⚠ " + (c.getMessage() == null ? c.getClass().getSimpleName() : c.getMessage()));
+                    setStatus(c.getMessage() == null ? c.getClass().getSimpleName() : c.getMessage(), true);
                 }
                 refresh();
             }
@@ -180,8 +230,8 @@ final class ProximityPanel extends JPanel {
         ProximityService.Row r = selected();
         if (r == null || r.address().isEmpty()) return;
         work("Sincronizando con «" + r.name() + "» por la red local…", () -> prox().syncWith(r.address()), res -> {
-            status.setText("Sincronizado con «" + res.peerName() + "»: " + res.received() + " recibidos, " + res.sent() + " enviados"
-                    + (res.conflicts() > 0 ? ", " + res.conflicts() + " conflicto(s)" : "") + ".");
+            setStatus("Sincronizado con «" + res.peerName() + "»: " + res.received() + " recibidos, " + res.sent() + " enviados"
+                    + (res.conflicts() > 0 ? ", " + res.conflicts() + " conflicto(s)" : "") + ".", false);
             onDataChanged.run();
         });
     }
@@ -195,17 +245,15 @@ final class ProximityPanel extends JPanel {
                 "Vincular dispositivo cercano", JOptionPane.PLAIN_MESSAGE, null, null, initial);
         if (addr == null || addr.isBlank()) return;
         work("Conectando y esperando la confirmación del código…", () -> prox().pairWith(addr), res -> {
-            status.setText("Vinculado con «" + res.peerName() + "»: " + res.received() + " recibidas, " + res.sent() + " enviadas"
-                    + (res.conflicts() > 0 ? ", " + res.conflicts() + " conflicto(s) por resolver" : "") + ".");
+            setStatus("Vinculado con «" + res.peerName() + "»: " + res.received() + " recibidas, " + res.sent() + " enviadas"
+                    + (res.conflicts() > 0 ? ", " + res.conflicts() + " conflicto(s) por resolver" : "") + ".", false);
             onDataChanged.run();
         });
     }
 
     private void allowPairing() {
         prox().allowPairing(120_000);
-        JOptionPane.showMessageDialog(owner, "Durante 2 minutos este equipo aceptará la vinculación de un dispositivo nuevo.\n"
-                + "En el otro dispositivo, elige este equipo (o escribe " + java.util.Objects.requireNonNullElse(localAddress(), "su IP") + ":" + prox().port() + ").\n"
-                + "Cuando se conecte verás un código de 6 dígitos para comparar.", "Permitir vinculación", JOptionPane.INFORMATION_MESSAGE);
+        Toast.show(owner, "Durante 2 minutos se acepta la vinculación de un equipo nuevo");
         refresh();
     }
 
@@ -219,6 +267,6 @@ final class ProximityPanel extends JPanel {
         if (JOptionPane.showConfirmDialog(owner, "¿Desvincular «" + r.name() + "» de la sincronización directa?\n"
                 + "Dejará de sincronizar por proximidad con este equipo hasta que lo vuelvas a vincular (el servidor no se toca).",
                 "Desvincular", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
-        work("Desvinculando…", () -> { prox().unlink(r.deviceId()); return null; }, x -> status.setText("«" + r.name() + "» desvinculado."));
+        work("Desvinculando…", () -> { prox().unlink(r.deviceId()); return null; }, x -> setStatus("«" + r.name() + "» desvinculado.", false));
     }
 }

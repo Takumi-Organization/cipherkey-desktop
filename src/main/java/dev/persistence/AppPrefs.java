@@ -21,11 +21,38 @@ public final class AppPrefs {
     }
 
     public static boolean isDark() {
-        return node.getBoolean("dark", false);
+        return node.getBoolean("dark", true);
     }
 
     public static void setDark(boolean dark) {
         node.putBoolean("dark", dark);
+    }
+
+    /** Clave del acento: uno de los predefinidos o {@code custom} (con {@link #customAccent()}). */
+    public static String accent() {
+        return node.get("accent", "bermellon");
+    }
+
+    public static void setAccent(String key) {
+        node.put("accent", key);
+    }
+
+    /** Acento personalizado en #RRGGBB (solo cuenta si {@link #accent()} es {@code custom}). */
+    public static String customAccent() {
+        return node.get("accentCustom", "#FF5A47");
+    }
+
+    public static void setCustomAccent(String hex) {
+        node.put("accentCustom", hex);
+    }
+
+    /** Si es true, no hay animaciones: los cambios de estado se aplican al instante. */
+    public static boolean reduceMotion() {
+        return node.getBoolean("reduceMotion", false);
+    }
+
+    public static void setReduceMotion(boolean reduce) {
+        node.putBoolean("reduceMotion", reduce);
     }
 
     public static int autoLockMinutes() {

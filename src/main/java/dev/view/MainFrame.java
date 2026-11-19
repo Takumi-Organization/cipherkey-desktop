@@ -7,7 +7,9 @@ import dev.model.PasswordEntry;
 import dev.persistence.AppPrefs;
 import dev.persistence.EntryCsv;
 import dev.persistence.VaultException;
+import dev.model.EntryQuery;
 import dev.security.PasswordAudit;
+import dev.security.VaultHealth;
 import dev.security.SecureClipboard;
 import dev.security.Totp;
 
@@ -28,7 +30,7 @@ import java.util.Locale;
 import java.util.function.Predicate;
 
 public class MainFrame extends JFrame implements DetailPanel.Actions {
-    private static final String CARD_TABLE = "table", CARD_EMPTY = "empty", CARD_NO_RESULTS = "noresults";
+    private static final String CARD_TABLE = "table", CARD_EMPTY = "empty", CARD_NO_RESULTS = "noresults", CARD_HEALTH = "health";
 
     private final PasswordManager manager;
     private final PasswordTableModel tableModel;
@@ -39,6 +41,14 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     private final CardLayout cards = new CardLayout();
     private final JPanel cardPanel = new JPanel(cards);
     private final JButton themeButton;
+    private final HealthView healthView;
+    private final SyncButton syncButton;
+    private final JLabel countLabel = Ui.eyebrow(" ");
+    private final FilterChip chipWeak = new FilterChip("Débiles"), chipReused = new FilterChip("Repetidas"),
+            chipOld = new FilterChip("Antiguas"), chip2fa = new FilterChip("2FA"), chipFav = new FilterChip("Favoritas");
+    private boolean syncingChips;
+    private VaultHealth.Result health = VaultHealth.analyze(java.util.List.of(), LocalDateTime.now(), 365);
+    private boolean healthShown;
     private final InactivityListener inactivityListener;
     private final dev.sync.SyncService syncService;
 
@@ -60,17 +70,16 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         tableModel = new PasswordTableModel(manager.getEntries());
         table = new EntryTable(tableModel);
         detail = new DetailPanel(this);
-        sidebar = new Sidebar(view -> {
-            viewFilter = view.filter();
-            applyFilter();
-        }, this::openAudit, this::lock);
-        themeButton = Ui.iconButton(themeIcon(), "Cambiar tema", e -> toggleTheme());
+        sidebar = new Sidebar(this::onViewSelected, this::openSettings, this::lock);
+        healthView = new HealthView(this::applyQueryFromHealth, this::openEntryFromHealth);
+        themeButton = Ui.iconButton(themeIcon(), "Cambiar entre Grafito y Washi", e -> toggleTheme());
+        syncButton = new SyncButton(e -> openSync());
 
         buildLayout();
         installShortcuts();
 
         table.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) detail.show(table.selectedEntry());
+            if (!e.getValueIsAdjusting()) showDetail();
         });
         searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
@@ -94,14 +103,14 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         Toolkit.getDefaultToolkit().addAWTEventListener(inactivityListener,
                 AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK);
 
-        sidebar.refresh(manager.getEntries());
+        refresh(null);
         syncService.setSasPrompt(this::askSas);
         syncService.setMergePrompt(this::askMerge);
         syncService.setDataListener(() -> SwingUtilities.invokeLater(() -> refresh(null)));
         syncService.start(st -> SwingUtilities.invokeLater(() -> onSyncStatus(st)));
-        setMinimumSize(new Dimension(940, 580));
+        setMinimumSize(new Dimension(1000, 620));
         Dimension saved = AppPrefs.windowSize();
-        setSize(saved != null ? saved : new Dimension(1200, 740));
+        setSize(saved != null ? saved : new Dimension(1360, 820));
         setLocationRelativeTo(null);
         if (AppPrefs.isWindowMaximized()) setExtendedState(JFrame.MAXIMIZED_BOTH);
     }
@@ -113,10 +122,15 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         tableScroll.setBorder(BorderFactory.createEmptyBorder());
         tableScroll.setViewportBorder(null);
         tableScroll.getViewport().setBackground(UIManager.getColor("Table.background"));
-        cardPanel.add(tableScroll, CARD_TABLE);
-        cardPanel.add(buildMessage("vault", "Tu bóveda está vacía",
+        JPanel listCard = new JPanel(new BorderLayout());
+        listCard.add(buildListBar(), BorderLayout.NORTH);
+        listCard.add(tableScroll, BorderLayout.CENTER);
+        cardPanel.add(listCard, CARD_TABLE);
+        cardPanel.add(buildMessage(Art.Kind.VAULT, "00 // Bóveda vacía", "Tu bóveda está vacía",
                 "Guarda aquí tus contraseñas; se cifran en tu equipo.", "Añadir la primera entrada"), CARD_EMPTY);
-        cardPanel.add(buildMessage("search", "Sin resultados", "Prueba con otra búsqueda o cambia de vista.", null), CARD_NO_RESULTS);
+        cardPanel.add(buildMessage(Art.Kind.SELECT, "00 // Sin resultados", "Sin resultados",
+                "Prueba con otra búsqueda o cambia de vista.", null), CARD_NO_RESULTS);
+        cardPanel.add(healthView, CARD_HEALTH);
 
         JPanel center = new JPanel(new BorderLayout());
         center.add(buildToolbar(), BorderLayout.NORTH);
@@ -132,17 +146,20 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     }
 
     private JComponent buildToolbar() {
-        searchField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Buscar por nombre, usuario, sitio o notas…  (Ctrl+F)");
+        searchField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Buscar…   filtros: is:weak  is:2fa  cat:web  user:  url:   (Ctrl+F)");
         searchField.putClientProperty(FlatClientProperties.TEXT_FIELD_LEADING_ICON, Icons.get("search"));
         searchField.putClientProperty(FlatClientProperties.TEXT_FIELD_SHOW_CLEAR_BUTTON, true);
-        searchField.putClientProperty(FlatClientProperties.STYLE, "arc: 999; margin: 5,10,5,10");
+        searchField.putClientProperty(FlatClientProperties.STYLE, "margin: 8,10,8,10");
+        searchField.getAccessibleContext().setAccessibleName("Buscar entradas");
+        searchField.setToolTipText("<html>Texto libre o filtros:<br><b>is:weak</b> <b>is:reused</b> <b>is:old</b> <b>is:2fa</b> <b>is:fav</b><br>"
+                + "<b>cat:</b>categoría • <b>user:</b>usuario • <b>url:</b>sitio • <b>-</b> para excluir</html>");
 
         JButton generator = Ui.iconButton(Icons.get("key", 18), "Generador de contraseñas",
                 e -> new PasswordGeneratorDialog(this, false).setVisible(true));
-        JButton syncButton = Ui.iconButton(Icons.get("refresh", 18), "Sincronización y dispositivos cercanos (Ctrl+Mayús+S)", e -> openSync());
+        syncButton.setToolTipText("Sincronización y dispositivos cercanos (Ctrl+Mayús+S)");
         JButton more = Ui.iconButton(Icons.get("more", 18), "Más opciones", e -> {});
         more.addActionListener(e -> buildMoreMenu().show(more, 0, more.getHeight()));
-        JButton add = Ui.primary("Nueva entrada", Icons.white("plus", 16), e -> addEntry());
+        JButton add = Ui.primary("Nueva entrada", Icons.onAccent("plus", 16), e -> addEntry());
         add.setToolTipText("Ctrl+N");
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -155,15 +172,75 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         right.add(add);
 
         JPanel bar = new JPanel(new BorderLayout(16, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 14));
+        bar.setBorder(BorderFactory.createEmptyBorder(16, 20, 12, 16));
         bar.add(searchField, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
         return bar;
     }
 
+    /** Filtros rápidos (conmutan operadores en la búsqueda), recuento y orden. */
+    private JComponent buildListBar() {
+        JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        chips.setOpaque(false);
+        bindChip(chipWeak, "is:weak");
+        bindChip(chipReused, "is:reused");
+        bindChip(chipOld, "is:old");
+        bindChip(chip2fa, "is:2fa");
+        bindChip(chipFav, "is:fav");
+        for (FilterChip c : new FilterChip[]{chipWeak, chipReused, chipOld, chip2fa, chipFav}) chips.add(c);
+
+        JButton sort = new JButton("Orden: " + EntryTable.Sort.NAME.label(), Icons.get("layers", 14));
+        sort.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
+        sort.putClientProperty(FlatClientProperties.STYLE, "margin: 4,8,4,8");
+        sort.getAccessibleContext().setAccessibleName("Orden de la lista");
+        sort.addActionListener(e -> {
+            JPopupMenu menu = new JPopupMenu();
+            ButtonGroup group = new ButtonGroup();
+            for (EntryTable.Sort s : EntryTable.Sort.values()) {
+                JRadioButtonMenuItem item = new JRadioButtonMenuItem(s.label(), sort.getText().endsWith(s.label()));
+                item.addActionListener(ev -> {
+                    table.setSort(s);
+                    sort.setText("Orden: " + s.label());
+                });
+                group.add(item);
+                menu.add(item);
+            }
+            menu.show(sort, 0, sort.getHeight());
+        });
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        right.setOpaque(false);
+        right.add(countLabel);
+        right.add(sort);
+
+        JPanel bar = new JPanel(new BorderLayout(12, 0));
+        bar.setBorder(BorderFactory.createEmptyBorder(0, 20, 10, 12));
+        bar.add(chips, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
+        return bar;
+    }
+
+    private void bindChip(FilterChip chip, String token) {
+        chip.addActionListener(e -> {
+            if (syncingChips) return;
+            searchField.setText(EntryQuery.toggleToken(searchField.getText(), token));
+        });
+    }
+
+    private void syncChips() {
+        syncingChips = true;
+        String t = searchField.getText();
+        chipWeak.setSelected(EntryQuery.hasToken(t, "is:weak"));
+        chipReused.setSelected(EntryQuery.hasToken(t, "is:reused"));
+        chipOld.setSelected(EntryQuery.hasToken(t, "is:old"));
+        chip2fa.setSelected(EntryQuery.hasToken(t, "is:2fa"));
+        chipFav.setSelected(EntryQuery.hasToken(t, "is:fav"));
+        syncingChips = false;
+    }
+
     private JPopupMenu buildMoreMenu() {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem settings = new JMenuItem("Ajustes…", Icons.get("key"));
+        JMenuItem settings = new JMenuItem("Ajustes y apariencia…", Icons.get("sliders"));
         settings.addActionListener(e -> openSettings());
         JMenuItem importItem = new JMenuItem("Importar desde CSV…", Icons.get("download"));
         importItem.addActionListener(e -> importCsv());
@@ -171,9 +248,9 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         exportItem.addActionListener(e -> exportCsv());
         JMenuItem backupItem = new JMenuItem("Copia de seguridad…", Icons.get("save"));
         backupItem.addActionListener(e -> backupVault());
-        JMenuItem syncItem = new JMenuItem("Sincronización y dispositivos cercanos…", Icons.get("refresh"));
+        JMenuItem syncItem = new JMenuItem("Sincronización y dispositivos cercanos…", Icons.get("wifi"));
         syncItem.addActionListener(e -> openSync());
-        JMenuItem auditItem = new JMenuItem("Auditoría de seguridad", Icons.get("shield"));
+        JMenuItem auditItem = new JMenuItem("Salud de la bóveda", Icons.get("shield-check"));
         auditItem.addActionListener(e -> openAudit());
         JMenuItem about = new JMenuItem("Acerca de CipherKey", Icons.get("info"));
         about.addActionListener(e -> new AboutDialog(this).setVisible(true));
@@ -196,22 +273,23 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         return menu;
     }
 
-    private JComponent buildMessage(String icon, String title, String text, String buttonText) {
+    private JComponent buildMessage(Art.Kind kind, String caption, String title, String text, String buttonText) {
         JPanel p = new JPanel(new GridBagLayout());
         JPanel box = new JPanel();
         box.setOpaque(false);
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
-        JLabel i = new JLabel(Icons.accent(icon, 56));
-        JLabel t = Ui.title(title);
+        JComponent art = Art.panel(kind, caption);
+        JLabel t = new JLabel(title);
+        t.setFont(Fonts.bold(20));
         JLabel d = Ui.muted(text);
-        for (JComponent c : new JComponent[]{i, t, d}) c.setAlignmentX(CENTER_ALIGNMENT);
-        box.add(i);
-        box.add(Box.createVerticalStrut(12));
+        for (JComponent c : new JComponent[]{art, t, d}) c.setAlignmentX(CENTER_ALIGNMENT);
+        box.add(art);
+        box.add(Box.createVerticalStrut(6));
         box.add(t);
-        box.add(Box.createVerticalStrut(4));
+        box.add(Box.createVerticalStrut(6));
         box.add(d);
         if (buttonText != null) {
-            JButton b = Ui.primary(buttonText, Icons.white("plus", 16), e -> addEntry());
+            JButton b = Ui.primary(buttonText, Icons.onAccent("plus", 16), e -> addEntry());
             b.setAlignmentX(CENTER_ALIGNMENT);
             box.add(Box.createVerticalStrut(18));
             box.add(b);
@@ -232,6 +310,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         bind(root, "ctrl B", "copyPassword", this::copyPassword);
         bind(root, "ctrl U", "copyUser", this::copyUsername);
         bind(root, "ctrl E", "edit", this::edit);
+        bind(root, "ctrl H", "health", this::openAudit);
 
         InputMap tableKeys = table.getInputMap(JComponent.WHEN_FOCUSED);
         tableKeys.put(KeyStroke.getKeyStroke("DELETE"), "deleteEntry");
@@ -288,38 +367,50 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
 
     // ---------- filtro y estado ----------
 
-    private void applyFilter() {
-        String[] tokens = searchField.getText().toLowerCase(Locale.ROOT).trim().split("\\s+");
-        table.setFilter(entry -> {
-            if (!viewFilter.test(entry)) return false;
-            String haystack = (nz(entry.getTitle()) + " " + nz(entry.getUsername()) + " " + nz(entry.getUrl()) + " "
-                    + nz(entry.getCategory()) + " " + nz(entry.getNotes())).toLowerCase(Locale.ROOT);
-            for (String t : tokens) {
-                if (!t.isEmpty() && !haystack.contains(t)) return false;
-            }
-            return true;
-        });
-        updateCard();
-        detail.show(table.selectedEntry());
+    private void onViewSelected(Sidebar.View view) {
+        healthShown = Sidebar.KEY_HEALTH.equals(view.key());
+        viewFilter = view.filter();
+        if (healthShown) healthView.update(health, true);
+        applyFilter();
     }
 
-    private static String nz(String s) {
-        return s == null ? "" : s;
+    private void applyFilter() {
+        EntryQuery query = EntryQuery.parse(searchField.getText());
+        table.setFilter(entry -> viewFilter.test(entry) && query.matches(entry, health.of(entry)));
+        syncChips();
+        int total = manager.getEntries().size();
+        countLabel.setText(table.getRowCount() == total ? total + (total == 1 ? " ENTRADA" : " ENTRADAS")
+                : table.getRowCount() + " DE " + total);
+        updateCard();
+        showDetail();
+    }
+
+    private void showDetail() {
+        PasswordEntry sel = table.selectedEntry();
+        detail.show(sel, sel == null ? null : health.of(sel));
     }
 
     private void updateCard() {
-        if (manager.getEntries().isEmpty()) cards.show(cardPanel, CARD_EMPTY);
+        if (healthShown) cards.show(cardPanel, CARD_HEALTH);
+        else if (manager.getEntries().isEmpty()) cards.show(cardPanel, CARD_EMPTY);
         else if (table.getRowCount() == 0) cards.show(cardPanel, CARD_NO_RESULTS);
         else cards.show(cardPanel, CARD_TABLE);
     }
 
-    /** Tras cambiar los datos: actualiza tabla, barra lateral y selección. */
+    /** Tras cambiar los datos: actualiza tabla, salud, barra lateral y selección. */
     private void refresh(Integer selectId) {
         tableModel.setEntries(manager.getEntries());
-        sidebar.refresh(manager.getEntries());
+        health = VaultHealth.analyze(manager.getEntries(), LocalDateTime.now(), PasswordAudit.DEFAULT_OLD_DAYS);
+        table.setHealth(health);
+        table.resort();
+        chipWeak.setCount(health.weak() + health.empty());
+        chipReused.setCount(health.reused());
+        chipOld.setCount(health.old());
+        sidebar.refresh(manager.getEntries(), health);
+        if (healthShown) healthView.update(health, false);
         updateCard();
         if (selectId != null) table.selectById(selectId);
-        detail.show(table.selectedEntry());
+        showDetail();
     }
 
     private Icon themeIcon() {
@@ -390,7 +481,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         PasswordEntry e = table.selectedEntry();
         if (e == null || e.getUsername() == null || e.getUsername().isEmpty()) return;
         SecureClipboard.copyToClipboard(e.getUsername());
-        Toast.show(this, "Usuario copiado · se borrará en 30 s");
+        Toast.show(this, "Usuario copiado • se borrará en 30 s");
     }
 
     @Override
@@ -398,7 +489,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         PasswordEntry e = table.selectedEntry();
         if (e == null || e.getPassword() == null || e.getPassword().isEmpty()) return;
         SecureClipboard.copyToClipboard(e.getPassword());
-        Toast.show(this, "Contraseña copiada · se borrará en 30 s");
+        Toast.show(this, "Contraseña copiada • se borrará en 30 s");
     }
 
     @Override
@@ -427,7 +518,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         if (e == null || e.getTotpSecret() == null) return;
         try {
             SecureClipboard.copyToClipboard(Totp.parse(e.getTotpSecret()).code(Instant.now()));
-            Toast.show(this, "Código 2FA copiado · se borrará en 30 s");
+            Toast.show(this, "Código 2FA copiado • se borrará en 30 s");
         } catch (IllegalArgumentException ex) {
             Toast.show(this, "La clave 2FA no es válida");
         }
@@ -439,14 +530,23 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         if (e != null) new HistoryDialog(this, e).setVisible(true);
     }
 
+    /** «Salud de la bóveda» sustituye a la antigua ventana de auditoría: es una vista más de la barra lateral. */
     private void openAudit() {
-        PasswordAudit.Report report = PasswordAudit.analyze(manager.getEntries(), LocalDateTime.now(),
-                PasswordAudit.DEFAULT_OLD_DAYS);
-        new AuditDialog(this, report, finding -> {
-            if (!searchField.getText().isEmpty()) searchField.setText("");
-            sidebar.selectAll();
-            table.selectById(finding.entry().getId());
-        }).setVisible(true);
+        sidebar.select(Sidebar.KEY_HEALTH);
+    }
+
+    private void applyQueryFromHealth(String query) {
+        sidebar.selectAll();
+        searchField.setText(query);
+        table.requestFocusInWindow();
+        if (table.getRowCount() > 0) table.setRowSelectionInterval(0, 0);
+    }
+
+    private void openEntryFromHealth(PasswordEntry entry) {
+        searchField.setText("");
+        sidebar.selectAll();
+        table.selectById(entry.getId());
+        table.requestFocusInWindow();
     }
 
     private void importCsv() {
@@ -555,17 +655,8 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     private boolean askSas(String peer, String sas, boolean incoming) throws Exception {
         boolean[] ok = {false};
         SwingUtilities.invokeAndWait(() -> {
-            String spaced = sas.substring(0, 3) + " " + sas.substring(3);
-            JLabel code = new JLabel(spaced, SwingConstants.CENTER);
-            code.setFont(code.getFont().deriveFont(Font.BOLD, 34f));
-            JPanel p = new JPanel(new BorderLayout(0, 10));
-            p.add(new JLabel("<html>" + (incoming ? "«" + Ui.escapeHtml(peer) + "» quiere vincularse con este equipo." : "Vinculando con «" + Ui.escapeHtml(peer) + "».")
-                    + "<br>Comprueba que <b>el otro dispositivo muestra este mismo código</b> antes de aceptar.</html>"), BorderLayout.NORTH);
-            p.add(code, BorderLayout.CENTER);
             Toolkit.getDefaultToolkit().beep();
-            Object[] opts = {"Coincide", "No coincide"};
-            ok[0] = JOptionPane.showOptionDialog(this, p, "Código de seguridad", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
-                    null, opts, opts[1]) == 0;
+            ok[0] = new SasDialog(this, peer, sas, incoming).ask();
         });
         return ok[0];
     }
@@ -593,6 +684,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
 
     /** Tras cada sincronización: si cambiaron los datos, se refresca la lista conservando la selección. */
     private void onSyncStatus(dev.sync.SyncService.Status st) {
+        syncButton.setState(st);
         if (st.running()) return;
         Integer sel = table.selectedEntry() == null ? null : table.selectedEntry().getId();
         refresh(sel);

@@ -16,7 +16,7 @@ public class PasswordGeneratorDialog extends JDialog {
     private final JCheckBox ambiguousChk = new JCheckBox("Evitar caracteres ambiguos (I l 1 O 0)");
     private final JSlider lengthSlider = new JSlider(8, 64, 20);
     private final JLabel lengthLabel = new JLabel();
-    private final JTextField resultField = new JTextField();
+    private final PasswordView result = new PasswordView(20, true);
     private final StrengthMeter meter = new StrengthMeter();
 
     private String lastGenerated = "";
@@ -27,15 +27,25 @@ public class PasswordGeneratorDialog extends JDialog {
         super(parent, "Generador de contraseñas", ModalityType.APPLICATION_MODAL);
         Ui.configureDialog(this);
 
-        resultField.setEditable(false);
-        resultField.setFont(new Font(Font.MONOSPACED, Font.BOLD, 17));
-        resultField.putClientProperty("FlatLaf.style", "margin: 8,12,8,4");
-        JToolBar tools = new JToolBar();
-        tools.setFloatable(false);
-        tools.setBorder(null);
-        tools.add(Ui.iconButton(Icons.get("refresh"), "Generar otra", e -> generate()));
-        tools.add(Ui.iconButton(Icons.get("copy"), "Copiar", e -> copy()));
-        resultField.putClientProperty("JTextField.trailingComponent", tools);
+        JPanel resultBox = new JPanel(new BorderLayout(10, 0)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = Draw.quality(g);
+                Draw.box(g2, Draw.p().raised(), Draw.p().accent(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
+                g2.dispose();
+            }
+        };
+        resultBox.setOpaque(false);
+        resultBox.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 10));
+        resultBox.add(result, BorderLayout.CENTER);
+        JPanel tools = new JPanel(new GridLayout(0, 1, 0, 4));
+        tools.setOpaque(false);
+        tools.add(Ui.iconButton(Icons.get("refresh", 16), "Generar otra", e -> generate()));
+        tools.add(new CopyButton("Copiar", this::copy));
+        JPanel toolsWrap = new JPanel(new BorderLayout());
+        toolsWrap.setOpaque(false);
+        toolsWrap.add(tools, BorderLayout.NORTH);
+        resultBox.add(toolsWrap, BorderLayout.EAST);
 
         lengthSlider.addChangeListener(e -> {
             lengthLabel.setText(lengthSlider.getValue() + " caracteres");
@@ -60,12 +70,15 @@ public class PasswordGeneratorDialog extends JDialog {
 
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
-        body.row(Ui.title("Generador de contraseñas"), 0);
-        body.row(resultField, 16);
-        body.row(meter, 10);
-        body.row(Ui.muted("Longitud"), 18);
+        JLabel heading = new JLabel("Generador de contraseñas");
+        heading.setFont(Fonts.bold(22));
+        body.row(Ui.section(0, "Generador"), 0);
+        body.row(heading, 6);
+        body.row(resultBox, 16);
+        body.row(meter, 12);
+        body.row(Ui.eyebrow("Longitud"), 20);
         body.row(lengthRow, 4);
-        body.row(Ui.muted("Caracteres"), 14);
+        body.row(Ui.eyebrow("Caracteres"), 14);
         body.row(classes, 6);
         body.row(ambiguousChk, 8);
 
@@ -73,14 +86,12 @@ public class PasswordGeneratorDialog extends JDialog {
         close.addActionListener(e -> dispose());
         JButton action;
         if (selectMode) {
-            action = new JButton("Usar contraseña");
-            action.addActionListener(e -> {
+            action = Ui.primary("Usar contraseña", null, e -> {
                 accepted = true;
                 dispose();
             });
         } else {
-            action = new JButton("Copiar", Icons.white("copy", 16));
-            action.addActionListener(e -> copy());
+            action = Ui.primary("Copiar", Icons.onAccent("copy", 16), e -> copy());
         }
         getRootPane().setDefaultButton(action);
         body.row(Ui.buttonBar(close, action), 20);
@@ -88,7 +99,7 @@ public class PasswordGeneratorDialog extends JDialog {
         setContentPane(body);
         lengthLabel.setText(lengthSlider.getValue() + " caracteres");
         generate();
-        setMinimumSize(new Dimension(440, 0));
+        setMinimumSize(new Dimension(500, 0));
         pack();
         setLocationRelativeTo(parent);
     }
@@ -111,15 +122,14 @@ public class PasswordGeneratorDialog extends JDialog {
         generator.setExcludeAmbiguous(ambiguousChk.isSelected());
         generator.setLength(lengthSlider.getValue());
         lastGenerated = generator.generate();
-        resultField.setText(lastGenerated);
-        resultField.setCaretPosition(0);
+        result.setPassword(lastGenerated, true);
         meter.update(lastGenerated);
     }
 
     private void copy() {
         if (!lastGenerated.isEmpty()) {
             SecureClipboard.copyToClipboard(lastGenerated);
-            Toast.show(this, "Copiada · se borrará en 30 s");
+            Toast.show(this, "Copiada • se borrará en 30 s");
         }
     }
 
