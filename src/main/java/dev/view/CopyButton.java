@@ -4,7 +4,7 @@ import com.formdev.flatlaf.FlatClientProperties;
 
 import javax.swing.*;
 
-/** Botón de copiar con respuesta visible: tras pulsar, el icono pasa a «✓» en el acento durante un momento. */
+/** Botón de copiar con respuesta visible: tras pulsar, el icono pasa a «✓» durante un momento. */
 public class CopyButton extends JButton {
     private static final int FEEDBACK_MS = 1500;
     private final Timer reset = new Timer(FEEDBACK_MS, e -> showIdle());
@@ -18,7 +18,7 @@ public class CopyButton extends JButton {
         showIdle();
         addActionListener(e -> {
             action.run();
-            setIcon(Icons.colored("check", 16, () -> Draw.p().accent()));
+            setIcon(Icons.ink("check", 16));
             setToolTipText("Copiado");
             reset.restart();
         });

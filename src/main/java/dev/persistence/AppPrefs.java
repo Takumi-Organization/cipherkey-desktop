@@ -6,7 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.prefs.Preferences;
 
-/** Preferencias de la aplicación (tema, bóvedas recientes, bloqueo). No contiene datos sensibles. */
+/**
+ * Preferencias de la aplicación (tema, bóvedas recientes, bloqueo). No contiene datos sensibles. El tema es solo
+ * oscuro/claro (Takumi oscuro por defecto); las claves de acento de versiones anteriores se ignoran.
+ */
 public final class AppPrefs {
     private static final int MAX_RECENT = 6;
     private static final String SEPARATOR = "\n";
@@ -26,24 +29,6 @@ public final class AppPrefs {
 
     public static void setDark(boolean dark) {
         node.putBoolean("dark", dark);
-    }
-
-    /** Clave del acento: uno de los predefinidos o {@code custom} (con {@link #customAccent()}). */
-    public static String accent() {
-        return node.get("accent", "ambar");
-    }
-
-    public static void setAccent(String key) {
-        node.put("accent", key);
-    }
-
-    /** Acento personalizado en #RRGGBB (solo cuenta si {@link #accent()} es {@code custom}). */
-    public static String customAccent() {
-        return node.get("accentCustom", "#FF5A47");
-    }
-
-    public static void setCustomAccent(String hex) {
-        node.put("accentCustom", hex);
     }
 
     /** Si es true, no hay animaciones: los cambios de estado se aplican al instante. */

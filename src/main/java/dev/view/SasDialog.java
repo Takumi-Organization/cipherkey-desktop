@@ -18,11 +18,11 @@ final class SasDialog extends JDialog {
                 + "Si no coincide, alguien podría estar interponiéndose: pulsa «No coincide».</html>");
         help.putClientProperty("FlatLaf.style", "foreground: $App.muted");
 
-        JButton yes = Ui.primary("Coincide", Icons.onAccent("check", 16), e -> {
+        JButton yes = Ui.primary("Coincide", Icons.onFill("check", 16), e -> {
             match = true;
             dispose();
         });
-        JButton no = new JButton("No coincide");
+        JButton no = Ui.secondary("No coincide");
         no.addActionListener(e -> dispose());
         getRootPane().setDefaultButton(no); // por seguridad, Intro rechaza
 
@@ -75,7 +75,7 @@ final class SasDialog extends JDialog {
             g2.setFont(Fonts.monoBold(44));
             for (int i = 0; i < digits.length() && i < 6; i++) {
                 int x = x0 + i * (bw + gap) + (i >= 3 ? mid - gap : 0);
-                Draw.box(g2, p.raised(), p.accent(), x, y, bw, bh, Draw.RADIUS);
+                Draw.box(g2, p.raised(), p.ink(), x, y, bw, bh, Draw.CUT_SM);
                 g2.setColor(p.ink());
                 Draw.centeredText(g2, String.valueOf(digits.charAt(i)), x, y, bw, bh);
             }

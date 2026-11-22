@@ -5,14 +5,19 @@ import dev.security.PasswordStrength;
 import java.awt.*;
 import java.awt.font.TextAttribute;
 import java.awt.geom.Arc2D;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.Path2D;
 import java.util.Map;
 
-/** Primitivas de pintado planas (Java2D) de Ryoku Glass: sin sombras ni degradados (el cristal vive en {@link Glass}). */
+/**
+ * Primitivas de pintado de Takumi (Java2D): radio 0, esquina superior derecha cortada en diagonal, bordes de 1 px,
+ * sin sombras, degradados ni desenfoque. El corte es de 10 / 14 / 22 px según el tamaño del componente.
+ */
 public final class Draw {
-    /** Diámetro del arco de las esquinas (RoundRectangle2D): 20 = radio de 10, el «control» de Glass. */
-    public static final int RADIUS = 20;
+    /** Corte de la esquina superior derecha: controles, tarjetas y paneles grandes. */
+    public static final int CUT_SM = 10, CUT_MD = 14, CUT_LG = 22;
+
+    /** Glifos de estado (el estado nunca va solo en color): correcto, aviso, error. */
+    public static final String G_OK = "●", G_WARN = "▲", G_ERR = "✕";
 
     private Draw() {}
 
@@ -28,35 +33,63 @@ public final class Draw {
         return g2;
     }
 
-    /** Fuente con espaciado entre letras (para las micro-etiquetas en mayúsculas, tracking .08em). */
+    /** Fuente con espaciado entre letras (etiquetas en mayúsculas). */
     public static Font tracked(Font f, float tracking) {
         return f.deriveFont(Map.of(TextAttribute.TRACKING, tracking));
     }
 
+    /** Etiqueta de Takumi: JetBrains Mono, mayúsculas, espaciada. */
     public static Font label() {
-        return tracked(Fonts.bold(11), 0.08f);
+        return tracked(Fonts.mono(11), 0.14f);
     }
 
-    public static void fillBox(Graphics2D g, Color fill, int x, int y, int w, int h, int arc) {
+    /** Fuente de las pastillas. */
+    public static Font chipFont() {
+        return tracked(Fonts.mono(10), 0.10f);
+    }
+
+    // ---- formas ----
+
+    /** Rectángulo con la esquina superior derecha cortada {@code cut} px (0 = rectángulo). */
+    public static Shape cutShape(float x, float y, float w, float h, float cut) {
+        Path2D.Float s = new Path2D.Float();
+        s.moveTo(x, y);
+        if (cut > 0) {
+            s.lineTo(x + w - cut, y);
+            s.lineTo(x + w, y + cut);
+        } else {
+            s.lineTo(x + w, y);
+        }
+        s.lineTo(x + w, y + h);
+        s.lineTo(x, y + h);
+        s.closePath();
+        return s;
+    }
+
+    public static void fillBox(Graphics2D g, Color fill, int x, int y, int w, int h, int cut) {
         g.setColor(fill);
-        g.fill(new RoundRectangle2D.Float(x, y, w, h, arc, arc));
+        g.fill(cutShape(x, y, w, h, cut));
     }
 
-    /** Recuadro de 1 px (borde fino) con radio. */
-    public static void box(Graphics2D g, Color fill, Color border, int x, int y, int w, int h, int arc) {
-        if (fill != null) fillBox(g, fill, x, y, w, h, arc);
+    /** Recuadro de 1 px (borde fino) con la esquina cortada. */
+    public static void box(Graphics2D g, Color fill, Color border, int x, int y, int w, int h, int cut) {
+        if (fill != null) fillBox(g, fill, x, y, w, h, cut);
         if (border != null) {
             g.setColor(border);
-            g.setStroke(new BasicStroke(1f));
-            g.draw(new RoundRectangle2D.Float(x + 0.5f, y + 0.5f, w - 1, h - 1, arc, arc));
+            g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+            g.draw(cutShape(x + 0.5f, y + 0.5f, w - 1, h - 1, cut));
         }
     }
 
-    /** Anillo de foco de 2 px separado 2 px del control (accesibilidad: foco siempre visible). */
-    public static void focusRing(Graphics2D g, int x, int y, int w, int h, int arc) {
-        g.setColor(p().accent());
-        g.setStroke(new BasicStroke(2f));
-        g.draw(new RoundRectangle2D.Float(x + 1, y + 1, w - 2, h - 2, arc, arc));
+    /** Foco = borde de tinta de 2 px (accesibilidad: el foco siempre se ve). */
+    public static void focusRing(Graphics2D g, int x, int y, int w, int h, int cut) {
+        focusRing(g, x, y, w, h, cut, p().ink());
+    }
+
+    public static void focusRing(Graphics2D g, int x, int y, int w, int h, int cut, Color c) {
+        g.setColor(c);
+        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+        g.draw(cutShape(x + 1, y + 1, w - 2, h - 2, cut));
     }
 
     /** Texto centrado en un rectángulo; devuelve su anchura. */
@@ -81,14 +114,14 @@ public final class Draw {
         return end <= 0 ? "" : text.substring(0, end) + e;
     }
 
-    /** Pastilla de etiqueta: texto en mayúsculas, borde fino o relleno plano. Devuelve su ancho. */
+    /** Pastilla de etiqueta: texto en mayúsculas mono, borde fino o relleno plano (inversión). Devuelve su ancho. */
     public static int chip(Graphics2D g, String text, int x, int y, Color fg, Color border, Color fill) {
         Font old = g.getFont();
-        g.setFont(tracked(Fonts.bold(10), 0.06f));
+        g.setFont(chipFont());
         FontMetrics fm = g.getFontMetrics();
         String t = text.toUpperCase();
         int w = fm.stringWidth(t) + 14, h = 18;
-        box(g, fill, border, x, y, w, h, 12);
+        box(g, fill, border, x, y, w, h, 0);
         g.setColor(fg);
         g.drawString(t, x + 7, baseline(fm, y, h));
         g.setFont(old);
@@ -96,28 +129,43 @@ public final class Draw {
     }
 
     public static int chipWidth(Graphics2D g, String text) {
-        FontMetrics fm = g.getFontMetrics(tracked(Fonts.bold(10), 0.06f));
-        return fm.stringWidth(text.toUpperCase()) + 14;
+        return g.getFontMetrics(chipFont()).stringWidth(text.toUpperCase()) + 14;
     }
 
-    /** Fuerza en 5 segmentos planos: los llenos usan el color del nivel. */
+    // ---- fuerza y gráficos en grises ----
+
+    /** Fuerza en 5 segmentos planos: cuántos se llenan indica el nivel (el color solo refuerza, en grises). */
     public static void segments(Graphics2D g, PasswordStrength.Level level, boolean empty, int x, int y, int w, int h, int gap) {
-        Palette p = p();
+        segments(g, level, empty, x, y, w, h, gap, strengthColor(level), p().lineHigh());
+    }
+
+    /** Como {@link #segments} con colores dados (para filas invertidas). */
+    public static void segments(Graphics2D g, PasswordStrength.Level level, boolean empty, int x, int y, int w, int h, int gap,
+                                Color on, Color off) {
         int n = 5, filled = empty ? 0 : level.ordinal() + 1;
         int sw = (w - gap * (n - 1)) / n;
-        Color c = strengthColor(level);
         for (int i = 0; i < n; i++) {
-            g.setColor(i < filled ? c : p.line1());
+            g.setColor(i < filled ? on : off);
             g.fillRect(x + i * (sw + gap), y, sw, h);
         }
     }
 
+    /** Gris del nivel de fortaleza: más tinta cuanto más fuerte (el texto del nivel siempre acompaña). */
     public static Color strengthColor(PasswordStrength.Level level) {
         Palette p = p();
         return switch (level) {
-            case VERY_WEAK, WEAK -> p.error();
-            case FAIR -> p.warn();
-            case STRONG, VERY_STRONG -> p.ok();
+            case VERY_WEAK, WEAK -> p.muted();
+            case FAIR -> p.dim();
+            case STRONG, VERY_STRONG -> p.ink();
+        };
+    }
+
+    /** Glifo y texto del nivel de fortaleza: ✕ débil, ▲ media, ● fuerte. */
+    public static String strengthGlyph(PasswordStrength.Level level) {
+        return switch (level) {
+            case VERY_WEAK, WEAK -> G_ERR;
+            case FAIR -> G_WARN;
+            case STRONG, VERY_STRONG -> G_OK;
         };
     }
 
@@ -134,26 +182,10 @@ public final class Draw {
         }
     }
 
-    /** Fondo de puntos de 16 px (motivo del estilo). */
-    public static void dotGrid(Graphics2D g, int x, int y, int w, int h, Color c) {
-        g.setColor(c);
-        for (int yy = y + 8; yy < y + h; yy += 16) {
-            for (int xx = x + 8; xx < x + w; xx += 16) {
-                g.fillRect(xx, yy, 2, 2);
-            }
-        }
-    }
-
-    /** Disco-sol plano (único motivo recurrente). */
-    public static void sun(Graphics2D g, int cx, int cy, int r, Color c) {
-        g.setColor(c);
-        g.fill(new Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2));
-    }
-
     /** Marca de mira «+». */
     public static void cross(Graphics2D g, int cx, int cy, int arm, Color c) {
         g.setColor(c);
-        g.setStroke(new BasicStroke(1.5f));
+        g.setStroke(new BasicStroke(1f));
         g.drawLine(cx - arm, cy, cx + arm, cy);
         g.drawLine(cx, cy - arm, cx, cy + arm);
     }

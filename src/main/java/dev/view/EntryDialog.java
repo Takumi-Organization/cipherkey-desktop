@@ -19,7 +19,7 @@ public class EntryDialog extends JDialog {
     private final JTextField urlField = new JTextField();
     private final JTextArea notesArea = new JTextArea(4, 20);
     private final JTextField totpField = new JTextField();
-    private final JLabel error = new JLabel(" ");
+    private final Ui.ErrorLabel error = new Ui.ErrorLabel();
     private final JCheckBox favoriteChk = new JCheckBox("Marcar como favorita");
     private final StrengthMeter meter = new StrengthMeter();
     private boolean confirmed;
@@ -34,7 +34,6 @@ public class EntryDialog extends JDialog {
         usernameField.putClientProperty("JTextField.placeholderText", "usuario o correo");
         urlField.putClientProperty("JTextField.placeholderText", "https://…");
         totpField.putClientProperty("JTextField.placeholderText", "Secreto en base32 o enlace otpauth://");
-        error.putClientProperty("FlatLaf.style", "foreground: $App.danger");
         error.putClientProperty("FlatLaf.styleClass", "small");
         categoryBox.setEditable(true);
         categoryBox.addItem("");
@@ -100,9 +99,9 @@ public class EntryDialog extends JDialog {
         body.row(favoriteChk, 10);
         body.row(error, 6);
 
-        JButton cancel = new JButton("Cancelar");
+        JButton cancel = Ui.secondary("Cancelar");
         cancel.addActionListener(e -> dispose());
-        JButton save = new JButton("Guardar");
+        JButton save = Ui.secondary("Guardar");
         save.addActionListener(e -> onSave());
         getRootPane().setDefaultButton(save);
         body.row(Ui.buttonBar(cancel, save), 10);

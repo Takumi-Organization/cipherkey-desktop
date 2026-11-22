@@ -15,7 +15,7 @@ public class CreateVaultDialog extends JDialog {
     private final JPasswordField pwd1 = Ui.passwordField(20);
     private final JPasswordField pwd2 = Ui.passwordField(20);
     private final StrengthMeter meter = new StrengthMeter();
-    private final JLabel error = new JLabel(" ");
+    private final Ui.ErrorLabel error = new Ui.ErrorLabel();
     private char[] result;
 
     public CreateVaultDialog(Window parent, String fileName) {
@@ -27,7 +27,6 @@ public class CreateVaultDialog extends JDialog {
             public void removeUpdate(DocumentEvent e) { meter.update(pwd1.getPassword()); }
             public void changedUpdate(DocumentEvent e) { }
         });
-        error.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
         error.putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
 
         JLabel warning = Ui.muted("<html>Si olvidas la clave maestra <b>no hay forma de recuperar</b> tus datos.<br>"
@@ -43,9 +42,9 @@ public class CreateVaultDialog extends JDialog {
         body.row(error, 8);
         body.row(warning, 4);
 
-        JButton cancel = new JButton("Cancelar");
+        JButton cancel = Ui.secondary("Cancelar");
         cancel.addActionListener(e -> dispose());
-        JButton create = new JButton("Crear bóveda");
+        JButton create = Ui.secondary("Crear bóveda");
         create.addActionListener(e -> onCreate());
         getRootPane().setDefaultButton(create);
         body.row(Ui.buttonBar(cancel, create), 18);

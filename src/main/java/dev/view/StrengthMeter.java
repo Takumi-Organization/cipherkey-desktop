@@ -42,12 +42,13 @@ public class StrengthMeter extends JPanel {
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = Draw.quality(g);
         Palette p = Draw.p();
-        int labelW = 150;
+        int labelW = 190;
         Draw.segments(g2, level, empty, 0, (getHeight() - 6) / 2, getWidth() - labelW - 10, 6, 3);
-        g2.setFont(Fonts.bold(11));
+        g2.setFont(Fonts.mono(11));
         FontMetrics fm = g2.getFontMetrics();
-        String text = empty ? "" : level.label() + " • ~" + Math.round(bits) + " bits";
-        g2.setColor(empty ? p.faint() : Draw.strengthColor(level));
+        // el nivel nunca va solo en color: glifo (✕ débil, ▲ media, ● fuerte) + texto + bits
+        String text = empty ? "" : Draw.strengthGlyph(level) + " " + level.label() + " · ~" + Math.round(bits) + " bits";
+        g2.setColor(empty ? p.muted() : p.ink());
         g2.drawString(Draw.ellipsize(text, fm, labelW), getWidth() - labelW, Draw.baseline(fm, 0, getHeight()));
         g2.dispose();
     }

@@ -5,12 +5,13 @@ import java.awt.GraphicsEnvironment;
 import java.io.InputStream;
 
 /**
- * Tipografía de Ryoku Glass, embebida (OFL, ver resources/fonts/LICENSE-*.txt): Inter para toda la interfaz y
- * JetBrains Mono solo para datos (contraseñas, códigos de un solo uso, dígitos de verificación). Si no cargan, cae a la
- * fuente lógica del sistema.
+ * Tipografía de Takumi, embebida (OFL, ver resources/fonts/LICENSE-*.txt): Outfit para la interfaz (200 en títulos,
+ * 300 en el cuerpo, 500 en énfasis y etiquetas de sección) y JetBrains Mono para datos y etiquetas (contraseñas,
+ * códigos, micro-etiquetas). Java2D no maneja ejes variables, así que Outfit viaja como tres instancias estáticas
+ * generadas de la fuente variable oficial. Si no cargan, cae a la fuente lógica del sistema.
  */
 public final class Fonts {
-    private static Font regular, bold, monoRegular, monoBold;
+    private static Font thin, light, medium, monoRegular, monoMedium;
     private static boolean loaded;
 
     private Fonts() {}
@@ -19,12 +20,13 @@ public final class Fonts {
     public static synchronized String install() {
         if (!loaded) {
             loaded = true;
-            regular = load("/fonts/Inter-Regular.ttf");
-            bold = load("/fonts/Inter-Bold.ttf");
+            thin = load("/fonts/Outfit-ExtraLight.ttf");
+            light = load("/fonts/Outfit-Light.ttf");
+            medium = load("/fonts/Outfit-Medium.ttf");
             monoRegular = load("/fonts/JetBrainsMono-Regular.ttf");
-            monoBold = load("/fonts/JetBrainsMono-Bold.ttf");
+            monoMedium = load("/fonts/JetBrainsMono-Medium.ttf");
         }
-        return regular != null ? regular.getFamily() : Font.SANS_SERIF;
+        return light != null ? light.getFamily() : Font.SANS_SERIF;
     }
 
     private static Font load(String resource) {
@@ -38,24 +40,33 @@ public final class Fonts {
         }
     }
 
+    private static Font pick(Font f, String fallback, int style, float size) {
+        install();
+        return (f != null ? f : new Font(fallback, style, 12)).deriveFont(Font.PLAIN, size);
+    }
+
+    /** Outfit 200: títulos y cifras grandes. */
+    public static Font thin(float size) {
+        return pick(thin, Font.SANS_SERIF, Font.PLAIN, size);
+    }
+
+    /** Outfit 300: cuerpo de texto. */
     public static Font regular(float size) {
-        install();
-        return (regular != null ? regular : new Font(Font.SANS_SERIF, Font.PLAIN, 12)).deriveFont(Font.PLAIN, size);
+        return pick(light, Font.SANS_SERIF, Font.PLAIN, size);
     }
 
+    /** Outfit 500: énfasis (nombres, secciones). */
     public static Font bold(float size) {
-        install();
-        return (bold != null ? bold : new Font(Font.SANS_SERIF, Font.BOLD, 12)).deriveFont(Font.PLAIN, size);
+        return pick(medium, Font.SANS_SERIF, Font.BOLD, size);
     }
 
-    /** Monoespaciada para DATOS (contraseñas, códigos): JetBrains Mono. */
+    /** JetBrains Mono 400: DATOS (contraseñas, códigos) y etiquetas. */
     public static Font mono(float size) {
-        install();
-        return (monoRegular != null ? monoRegular : new Font(Font.MONOSPACED, Font.PLAIN, 12)).deriveFont(Font.PLAIN, size);
+        return pick(monoRegular, Font.MONOSPACED, Font.PLAIN, size);
     }
 
+    /** JetBrains Mono 500: datos destacados. */
     public static Font monoBold(float size) {
-        install();
-        return (monoBold != null ? monoBold : new Font(Font.MONOSPACED, Font.BOLD, 12)).deriveFont(Font.PLAIN, size);
+        return pick(monoMedium, Font.MONOSPACED, Font.BOLD, size);
     }
 }

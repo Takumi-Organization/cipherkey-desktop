@@ -20,7 +20,7 @@ public class SettingsDialog extends JDialog {
     private final JPasswordField newPwd = Ui.passwordField(20);
     private final JPasswordField confirmPwd = Ui.passwordField(20);
     private final StrengthMeter meter = new StrengthMeter();
-    private final JLabel error = new JLabel(" ");
+    private final Ui.ErrorLabel error = new Ui.ErrorLabel();
     private boolean passwordChanged;
 
     public SettingsDialog(Frame parent, PasswordManager manager) {
@@ -42,17 +42,15 @@ public class SettingsDialog extends JDialog {
             public void removeUpdate(DocumentEvent e) { meter.update(newPwd.getPassword()); }
             public void changedUpdate(DocumentEvent e) { }
         });
-        error.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
         error.putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
 
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         JLabel heading = new JLabel("Ajustes");
-        heading.setFont(Fonts.bold(22));
+        heading.setFont(Fonts.thin(28));
         body.row(Ui.section(0, "Apariencia"), 0);
         body.row(heading, 6);
         body.row(Ui.labeled("Tema", modeRow()), 16);
-        body.row(Ui.labeled("Color de acento", new AccentPicker(() -> { })), 14);
         JCheckBox motion = new JCheckBox("Reducir movimiento (sin animaciones)", AppPrefs.reduceMotion());
         motion.addActionListener(e -> AppPrefs.setReduceMotion(motion.isSelected()));
         body.row(motion, 14);
@@ -65,7 +63,7 @@ public class SettingsDialog extends JDialog {
         body.row(Ui.labeled("Repite la clave nueva", confirmPwd), 10);
         body.row(error, 8);
 
-        JButton close = new JButton("Cerrar");
+        JButton close = Ui.secondary("Cerrar");
         close.addActionListener(e -> dispose());
         JButton change = Ui.primary("Cambiar clave", null, e -> changeMasterPassword());
         body.row(Ui.buttonBar(close, change), 14);
@@ -77,19 +75,22 @@ public class SettingsDialog extends JDialog {
     }
 
 
-    /** Dos botones conmutables: oscuro y claro. */
+    /** Dos botones conmutables: Takumi oscuro y Takumi papel (el activo va invertido). */
     private JComponent modeRow() {
-        JToggleButton graphite = new JToggleButton("Oscuro", Icons.get("moon", 16), ThemeManager.isDark());
-        JToggleButton washi = new JToggleButton("Claro", Icons.get("sun", 16), !ThemeManager.isDark());
+        JToggleButton darkBtn = new JToggleButton("Takumi oscuro", null, ThemeManager.isDark());
+        JToggleButton lightBtn = new JToggleButton("Takumi papel", null, !ThemeManager.isDark());
+        // el icono acompaña a la inversión: color de fondo si el botón está activo, tinta suave si no
+        darkBtn.setIcon(Icons.colored("moon", 16, () -> darkBtn.isSelected() ? Draw.p().onFill() : Draw.p().dim()));
+        lightBtn.setIcon(Icons.colored("sun", 16, () -> lightBtn.isSelected() ? Draw.p().onFill() : Draw.p().dim()));
         ButtonGroup g = new ButtonGroup();
-        g.add(graphite);
-        g.add(washi);
-        graphite.addActionListener(e -> setMode(true));
-        washi.addActionListener(e -> setMode(false));
+        g.add(darkBtn);
+        g.add(lightBtn);
+        darkBtn.addActionListener(e -> setMode(true));
+        lightBtn.addActionListener(e -> setMode(false));
         JPanel p = new JPanel(new GridLayout(1, 2, 8, 0));
         p.setOpaque(false);
-        p.add(graphite);
-        p.add(washi);
+        p.add(darkBtn);
+        p.add(lightBtn);
         return p;
     }
 

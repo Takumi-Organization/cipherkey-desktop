@@ -31,7 +31,7 @@ public class PasswordGeneratorDialog extends JDialog {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = Draw.quality(g);
-                Draw.box(g2, Draw.p().raised(), Draw.p().accent(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
+                Draw.box(g2, Draw.p().raised(), Draw.p().ink(), 0, 0, getWidth(), getHeight(), Draw.CUT_MD);
                 g2.dispose();
             }
         };
@@ -71,7 +71,7 @@ public class PasswordGeneratorDialog extends JDialog {
         VBox body = new VBox();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         JLabel heading = new JLabel("Generador de contraseñas");
-        heading.setFont(Fonts.bold(22));
+        heading.setFont(Fonts.thin(28));
         body.row(Ui.section(0, "Generador"), 0);
         body.row(heading, 6);
         body.row(resultBox, 16);
@@ -82,7 +82,7 @@ public class PasswordGeneratorDialog extends JDialog {
         body.row(classes, 6);
         body.row(ambiguousChk, 8);
 
-        JButton close = new JButton(selectMode ? "Cancelar" : "Cerrar");
+        JButton close = Ui.secondary(selectMode ? "Cancelar" : "Cerrar");
         close.addActionListener(e -> dispose());
         JButton action;
         if (selectMode) {
@@ -91,7 +91,7 @@ public class PasswordGeneratorDialog extends JDialog {
                 dispose();
             });
         } else {
-            action = Ui.primary("Copiar", Icons.onAccent("copy", 16), e -> copy());
+            action = Ui.primary("Copiar", Icons.onFill("copy", 16), e -> copy());
         }
         getRootPane().setDefaultButton(action);
         body.row(Ui.buttonBar(close, action), 20);

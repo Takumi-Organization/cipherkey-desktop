@@ -1,91 +1,49 @@
 package dev.view;
 
 import java.awt.Color;
-import java.util.List;
 
 /**
- * Tokens de color de «Ryoku Glass»: neutros fríos, tinta, filetes finos y UN acento por tema. Dos modos: oscuro (por
- * defecto) y claro. Es un valor inmutable; {@link ThemeManager} guarda el activo.
+ * Tokens de color de Takumi (fuente de verdad: {@code takumi-design/tokens.json}): monocromo estricto, sin acento.
+ * Dos variantes, oscuro («papel negro», por defecto) y claro («papel»). Es un valor inmutable; {@link ThemeManager}
+ * guarda la activa.
+ *
+ * <p>Correspondencia con los tokens: {@code paper}=fondo, {@code raised}=panel, {@code high}=elevado, {@code ink}=tinta,
+ * {@code dim}=tinta suave, {@code muted}=tinta apagada, {@code faint}=tinta tenue (solo decorativa: no cumple 4,5:1),
+ * {@code line}=línea, {@code lineHigh}=línea alta. La inversión (seleccionado, botón primario) pinta con
+ * {@link #fill()} (tinta) y escribe con {@link #onFill()} (fondo).
  */
 public record Palette(boolean dark, Color paper, Color raised, Color high, Color ink, Color dim, Color muted, Color faint,
-                      Color accent, Color onAccent, Color ok, Color warn, Color error, Color secondary) {
+                      Color line, Color lineHigh) {
 
-    /** Acento predefinido: cada uno trae su variante para fondo oscuro y para fondo claro (contraste AA medido sobre el papel). */
-    public record Accent(String key, String label, Color forDark, Color forLight) {
-        public Color on(boolean dark) {
-            return dark ? forDark : forLight;
-        }
-    }
+    public static final Palette DARK = new Palette(true, c(0x000000), c(0x080808), c(0x111111), c(0xF2F2F2), c(0xC9C9C9),
+            c(0x8C8C8C), c(0x4A4A4A), c(0x1C1C1C), c(0x3A3A3A));
+    public static final Palette LIGHT = new Palette(false, c(0xF4F4F4), c(0xFFFFFF), c(0xEBEBEB), c(0x0A0A0A), c(0x333333),
+            c(0x6B6B6B), c(0xB0B0B0), c(0xE0E0E0), c(0xC0C0C0));
 
-    /**
-     * Las CLAVES se conservan (se guardan en las preferencias): «ambar» es Oro y «azul» es Egeo. «naranja» se retiró; un
-     * valor guardado que no exista cae al acento por defecto.
-     */
-    public static final List<Accent> ACCENTS = List.of(
-            new Accent("bermellon", "Bermellón", new Color(0xFF5A4A), new Color(0xD12B1F)),
-            new Accent("ambar", "Oro", new Color(0xF2B33D), new Color(0x8F5F00)),
-            new Accent("lima", "Lima", new Color(0xB6E04A), new Color(0x4F7A00)),
-            new Accent("fucsia", "Fucsia", new Color(0xFF6FB1), new Color(0xC4166F)),
-            new Accent("azul", "Egeo", new Color(0x62B6E8), new Color(0x0B6B99)));
+    /** Escala de grises de los gráficos (de más a menos tinta). */
+    public static final Color[] GRAYS = {c(0xF2F2F2), c(0xC9C9C9), c(0x8C8C8C), c(0x5E5E5E), c(0x3A3A3A), c(0x1C1C1C)};
 
-    public static final String DEFAULT_ACCENT = "ambar";
-
-    /** Paleta de un modo con un acento concreto (ya adaptado al modo). */
-    public static Palette of(boolean dark, Color accent) {
-        Color onAccent = bestText(accent, dark ? new Color(0x0F1115) : Color.WHITE, dark ? Color.WHITE : new Color(0x0F1115));
-        return dark
-                ? new Palette(true, c(0x0F1115), c(0x171A20), c(0x232830), c(0xECEFF4), c(0xB4BBC7), c(0x8E97A6), c(0x5F6877),
-                        accent, onAccent, c(0x6FD3A6), c(0xF0B25E), c(0xFF7A70), c(0x7FC4EC))
-                : new Palette(false, c(0xF4F5F7), c(0xFFFFFF), c(0xE9ECF0), c(0x14171C), c(0x4A515C), c(0x5F6773), c(0x9AA2AE),
-                        accent, onAccent, c(0x1B6B49), c(0x8A5A00), c(0xB3261E), c(0x0B6B99));
-    }
-
-    /** Paleta con un acento predefinido (por clave) o personalizado (hex #RRGGBB); si no se reconoce, el de por defecto. */
-    public static Palette resolve(boolean dark, String accentKey, String customHex) {
-        if ("custom".equals(accentKey)) {
-            Color c = parseHex(customHex);
-            if (c != null) return of(dark, ensureContrast(c, dark ? c(0x0F1115) : c(0xF4F5F7), 3.0));
-        }
-        for (Accent a : ACCENTS) {
-            if (a.key().equals(accentKey)) return of(dark, a.on(dark));
-        }
-        for (Accent a : ACCENTS) {
-            if (a.key().equals(DEFAULT_ACCENT)) return of(dark, a.on(dark));
-        }
-        return of(dark, ACCENTS.get(0).on(dark));
-    }
-
-    public static Color parseHex(String hex) {
-        if (hex == null) return null;
-        String h = hex.trim();
-        if (h.startsWith("#")) h = h.substring(1);
-        if (!h.matches("[0-9a-fA-F]{6}")) return null;
-        return new Color(Integer.parseInt(h, 16));
-    }
-
-    public static String toHex(Color c) {
-        return String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
+    public static Palette of(boolean dark) {
+        return dark ? DARK : LIGHT;
     }
 
     private static Color c(int rgb) {
         return new Color(rgb);
     }
 
+    // ---- inversión ----
+
+    /** Fondo de lo seleccionado / activo / botón primario: la tinta. */
+    public Color fill() {
+        return ink;
+    }
+
+    /** Texto sobre {@link #fill()}: el color del fondo. */
+    public Color onFill() {
+        return paper;
+    }
+
     // ---- derivados ----
-
-    /** Tinta con una opacidad dada (0–1): los filetes son tinta al 10 / 16 / 30 %. */
-    public Color inkAlpha(double a) {
-        return alpha(ink, a);
-    }
-
-    public Color line1() { return inkAlpha(0.10); }
-    public Color line2() { return inkAlpha(0.16); }
-    public Color line3() { return inkAlpha(0.30); }
-
-    /** Velo del acento (selección, chips). */
-    public Color accentTint(double a) {
-        return alpha(accent, a);
-    }
 
     public static Color alpha(Color c, double a) {
         return new Color(c.getRed(), c.getGreen(), c.getBlue(), (int) Math.round(Math.max(0, Math.min(1, a)) * 255));
@@ -97,6 +55,10 @@ public record Palette(boolean dark, Color paper, Color raised, Color high, Color
                 (int) Math.round(base.getRed() + (a.getRed() - base.getRed()) * t),
                 (int) Math.round(base.getGreen() + (a.getGreen() - base.getGreen()) * t),
                 (int) Math.round(base.getBlue() + (a.getBlue() - base.getBlue()) * t));
+    }
+
+    public static String toHex(Color c) {
+        return String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
     }
 
     // ---- contraste (WCAG 2.x) ----
@@ -115,18 +77,8 @@ public record Palette(boolean dark, Color paper, Color raised, Color high, Color
         return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
     }
 
-    /** De dos textos posibles, el que más contrasta con el fondo. */
-    public static Color bestText(Color background, Color first, Color second) {
-        return contrast(background, first) >= contrast(background, second) ? first : second;
-    }
-
-    /** Acerca un color al blanco o al negro (según el papel) hasta alcanzar el contraste mínimo con el papel. */
-    public static Color ensureContrast(Color c, Color paper, double min) {
-        Color target = luminance(paper) < 0.5 ? Color.WHITE : Color.BLACK;
-        Color out = c;
-        for (int i = 0; i < 20 && contrast(out, paper) < min; i++) {
-            out = mix(out, target, 0.1);
-        }
-        return out;
+    /** Saturación HSB (0 = gris puro). */
+    public static float saturation(Color c) {
+        return Color.RGBtoHSB(c.getRed(), c.getGreen(), c.getBlue(), null)[1];
     }
 }

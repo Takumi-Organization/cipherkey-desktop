@@ -48,7 +48,7 @@ public class PasswordView extends JPanel {
         FontMetrics fm = g2.getFontMetrics();
         int cw = fm.charWidth('M');
         if (text.isEmpty()) {
-            g2.setColor(p.faint());
+            g2.setColor(p.muted());
             g2.drawString("—", 0, fm.getAscent());
             g2.dispose();
             return;
@@ -75,7 +75,8 @@ public class PasswordView extends JPanel {
                 g2.drawString("…", x, y);
                 break;
             }
-            g2.setColor(Character.isDigit(c) ? p.accent() : Character.isLetter(c) ? p.ink() : p.secondary());
+            // tres tonos de gris: dígitos en tinta, letras en tinta suave, símbolos apagados
+            g2.setColor(Character.isDigit(c) ? p.ink() : Character.isLetter(c) ? p.dim() : p.muted());
             g2.drawString(String.valueOf(c), x, y);
             x += cw;
         }

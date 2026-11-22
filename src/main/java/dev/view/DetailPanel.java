@@ -79,7 +79,7 @@ public class DetailPanel extends JPanel {
     @Override
     protected void paintChildren(Graphics g) {
         super.paintChildren(g);
-        g.setColor(Draw.p().line1());
+        g.setColor(Draw.p().lineHigh());
         g.fillRect(0, 0, 1, getHeight()); // filete que separa de la lista
     }
 
@@ -87,7 +87,7 @@ public class DetailPanel extends JPanel {
         VBox.Scrolling col = new VBox.Scrolling();
         col.setBorder(BorderFactory.createEmptyBorder(22, 22, 20, 22));
 
-        title.setFont(Fonts.bold(20));
+        title.setFont(Fonts.thin(26));
         favorite.addActionListener(e -> actions.toggleFavorite());
         JPanel titles = new JPanel(new GridLayout(0, 1, 0, 3));
         titles.setOpaque(false);
@@ -107,10 +107,11 @@ public class DetailPanel extends JPanel {
             revealed = !revealed;
             renderPassword();
         });
-        username.setFont(Fonts.regular(14));
+        username.setFont(Fonts.mono(14));
 
         urlLink.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        urlLink.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.accent; margin: 0,0,0,0");
+        urlLink.putClientProperty(FlatClientProperties.STYLE, "foreground: $Label.foreground; margin: 0,0,0,0");
+        urlLink.setFont(Fonts.regular(13).deriveFont(java.util.Map.of(java.awt.font.TextAttribute.UNDERLINE, java.awt.font.TextAttribute.UNDERLINE_ON)));
         urlLink.setHorizontalAlignment(SwingConstants.LEFT);
         urlLink.addActionListener(e -> actions.openUrl());
 
@@ -126,9 +127,9 @@ public class DetailPanel extends JPanel {
         historyBtn.setHorizontalAlignment(SwingConstants.LEFT);
         historyBtn.addActionListener(e -> actions.showHistory());
 
-        JButton edit = Ui.primary("Editar", Icons.onAccent("edit", 16), e -> actions.edit());
+        JButton edit = Ui.primary("Editar", Icons.onFill("edit", 16), e -> actions.edit());
         edit.setToolTipText("Ctrl+E");
-        JButton delete = Ui.danger("Eliminar", Icons.colored("trash", 16, () -> UIManager.getColor("App.danger")), e -> actions.delete());
+        JButton delete = Ui.danger("Eliminar", Icons.ink("trash", 16), e -> actions.delete());
         JPanel buttons = new JPanel(new GridLayout(1, 2, 10, 0));
         buttons.setOpaque(false);
         buttons.add(edit);
@@ -176,6 +177,8 @@ public class DetailPanel extends JPanel {
     private JPanel lines() {
         JPanel p = new JPanel(new GridLayout(0, 1, 0, 4));
         p.setOpaque(false);
+        created.setFont(Fonts.mono(12));
+        modified.setFont(Fonts.mono(12));
         created.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
         modified.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
         p.add(created);
@@ -197,7 +200,7 @@ public class DetailPanel extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = Draw.quality(g);
-                Draw.box(g2, Draw.p().paper(), Draw.p().line2(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
+                Draw.box(g2, Draw.p().paper(), Draw.p().lineHigh(), 0, 0, getWidth(), getHeight(), Draw.CUT_SM);
                 g2.dispose();
             }
         };
@@ -242,20 +245,20 @@ public class DetailPanel extends JPanel {
         String cat = entry.getCategory();
         subtitle.setText(site.isEmpty() ? (cat == null || cat.isBlank() ? "Sin categoría" : cat) : site);
         favorite.setIcon(entry.isFavorite()
-                ? Icons.colored("star-filled", 18, () -> UIManager.getColor("App.warning"))
+                ? Icons.ink("star-filled", 18)
                 : Icons.get("star", 18));
         favorite.setToolTipText(entry.isFavorite() ? "Quitar de favoritas" : "Marcar como favorita");
         favorite.getAccessibleContext().setAccessibleName(favorite.getToolTipText());
 
         List<Chips.Spec> specs = new ArrayList<>();
         Palette p = Draw.p();
-        if (cat != null && !cat.isBlank()) specs.add(new Chips.Spec(cat, p.dim(), p.line2(), null));
+        if (cat != null && !cat.isBlank()) specs.add(Chips.Spec.plain(cat, p.dim()));
         boolean hasTotp = entry.getTotpSecret() != null && !entry.getTotpSecret().isBlank();
-        if (hasTotp) specs.add(new Chips.Spec("2FA", p.secondary(), p.line2(), null));
+        if (hasTotp) specs.add(Chips.Spec.plain("2FA", p.dim()));
         if (health != null) {
-            if (health.has(VaultHealth.Flag.WEAK)) specs.add(new Chips.Spec("Débil", p.error(), p.error(), null));
-            if (health.has(VaultHealth.Flag.REUSED)) specs.add(new Chips.Spec("Repetida", p.warn(), p.warn(), null));
-            if (health.has(VaultHealth.Flag.OLD)) specs.add(new Chips.Spec("Antigua", p.muted(), p.line3(), null));
+            if (health.has(VaultHealth.Flag.WEAK)) specs.add(Chips.Spec.error("Débil"));
+            if (health.has(VaultHealth.Flag.REUSED)) specs.add(Chips.Spec.warn("Repetida"));
+            if (health.has(VaultHealth.Flag.OLD)) specs.add(Chips.Spec.plain("Antigua", p.muted()));
         }
         chips.set(specs);
 
@@ -307,9 +310,10 @@ public class DetailPanel extends JPanel {
         double left = 1 - (now.toEpochMilli() % periodMs) / (double) periodMs;
         int seconds = totp.secondsRemaining(now);
         totpRing.setValue(Motion.enabled() ? left : seconds / (double) totp.period());
-        totpRing.setCenter(String.valueOf(seconds), "");
-        totpRing.setColor(seconds <= 5 ? Draw.p().error() : Draw.p().accent());
-        totpCode.setForeground(seconds <= 5 ? Draw.p().error() : Draw.p().ink());
+        // últimos segundos: aviso «▲» bajo la cifra (el estado no va solo en color) y el arco pasa a gris apagado
+        totpRing.setCenter(String.valueOf(seconds), seconds <= 5 ? Draw.G_WARN : "");
+        totpRing.setColor(seconds <= 5 ? Draw.p().muted() : Draw.p().ink());
+        totpCode.setForeground(Draw.p().ink());
     }
 
     @Override

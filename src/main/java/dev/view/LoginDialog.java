@@ -19,7 +19,7 @@ import java.util.Arrays;
 public class LoginDialog extends JDialog {
     private final JComboBox<String> pathBox = new JComboBox<>();
     private final JPasswordField passwordField = Ui.passwordField(20);
-    private final JLabel errorLabel = new JLabel(" ");
+    private final Ui.ErrorLabel errorLabel = new Ui.ErrorLabel();
     private boolean succeeded;
     private Path selectedFile;
 
@@ -44,7 +44,7 @@ public class LoginDialog extends JDialog {
             pathBox.setSelectedItem("");
         }
 
-        JButton browse = new JButton("Examinar…");
+        JButton browse = Ui.secondary("Examinar…");
         browse.addActionListener(this::onBrowse);
         JPanel pathRow = new JPanel(new BorderLayout(8, 0));
         pathRow.setOpaque(false);
@@ -52,31 +52,36 @@ public class LoginDialog extends JDialog {
         pathRow.add(browse, BorderLayout.EAST);
 
         passwordField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Tu clave maestra");
-        errorLabel.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
         errorLabel.putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
         if (error != null) errorLabel.setText(error);
 
-        JButton unlock = Ui.primary("Desbloquear", Icons.onAccent("lock", 16), this::onOk);
+        JButton unlock = Ui.primary("Desbloquear", Icons.onFill("lock", 16), this::onOk);
         unlock.putClientProperty(FlatClientProperties.STYLE_CLASS, "large");
-        unlock.putClientProperty(FlatClientProperties.STYLE, unlock.getClientProperty(FlatClientProperties.STYLE) + "; minimumHeight: 44");
+        unlock.putClientProperty(FlatClientProperties.STYLE, "minimumHeight: 44");
         getRootPane().setDefaultButton(unlock);
 
         JButton create = new JButton("Crear una bóveda nueva");
         create.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        create.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.accent");
+        create.putClientProperty(FlatClientProperties.STYLE, "foreground: $Label.foreground");
+        create.setFont(Fonts.regular(13).deriveFont(java.util.Map.of(java.awt.font.TextAttribute.UNDERLINE, java.awt.font.TextAttribute.UNDERLINE_ON)));
         create.addActionListener(this::onNewVault);
 
+        JPanel look = new JPanel(new BorderLayout(10, 0));
         JButton theme = Ui.iconButton(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18), "Cambiar entre oscuro y claro", e -> {
             ThemeManager.toggle();
             ((JButton) e.getSource()).setIcon(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18));
+            look.removeAll();
+            look.add(Ui.muted(ThemeManager.isDark() ? "Takumi oscuro" : "Takumi papel"), BorderLayout.WEST);
+            look.add((JButton) e.getSource(), BorderLayout.EAST);
+            look.revalidate();
+            look.repaint();
         });
-        JPanel look = new JPanel(new BorderLayout(10, 0));
         look.setOpaque(false);
-        look.add(new AccentPicker(() -> theme.setIcon(Icons.get(ThemeManager.isDark() ? "sun" : "moon", 18))), BorderLayout.WEST);
+        look.add(Ui.muted(ThemeManager.isDark() ? "Takumi oscuro" : "Takumi papel"), BorderLayout.WEST);
         look.add(theme, BorderLayout.EAST);
 
         JLabel heading = new JLabel("Desbloquea tu bóveda");
-        heading.setFont(Fonts.bold(24));
+        heading.setFont(Fonts.thin(30));
 
         VBox form = new VBox();
         form.setBorder(BorderFactory.createEmptyBorder(34, 40, 26, 40));
@@ -109,7 +114,7 @@ public class LoginDialog extends JDialog {
 
 
 
-    /** Lado izquierdo: marca, ilustración «plano a tinta» y lema. */
+    /** Lado izquierdo: marca, ilustración de línea fina y lema. */
     private static final class ArtSide extends JComponent {
         ArtSide() {
             setPreferredSize(new Dimension(340, 500));
@@ -122,20 +127,18 @@ public class LoginDialog extends JDialog {
             int w = getWidth(), h = getHeight();
             g2.setColor(p.raised());
             g2.fillRect(0, 0, w, h);
-            Art.backdrop(g2, 0, 0, w, h, w - 70, 150, 110);
             Art.window(g2, Art.Kind.LOCK, 52, 150, 220, 170);
             Draw.cross(g2, 30, 126, 6, p.ink());
             Draw.cross(g2, w - 34, 350, 6, p.ink());
-            Draw.fillBox(g2, p.accent(), 36, 34, 30, 30, Draw.RADIUS);
-            Icons.onAccent("lock", 16).paintIcon(this, g2, 43, 41);
+            Art.mark(g2, 36, 30, 44);
             g2.setColor(p.ink());
-            g2.setFont(Fonts.bold(22));
-            g2.drawString("CipherKey", 78, 56);
+            g2.setFont(Draw.tracked(Fonts.thin(22), 0.16f));
+            g2.drawString("CIPHERKEY", 94, 58);
             g2.setFont(Draw.label());
             g2.setColor(p.muted());
             g2.drawString("TU BÓVEDA CIFRADA", 36, h - 62);
-            g2.drawString("100 % OFFLINE  •  SIN NUBE", 36, h - 44);
-            g2.setColor(p.line1());
+            g2.drawString("100 % OFFLINE · SIN NUBE", 36, h - 44);
+            g2.setColor(p.lineHigh());
             g2.fillRect(w - 1, 0, 1, h);
             g2.dispose();
         }

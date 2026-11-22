@@ -23,11 +23,11 @@ final class ProximityPanel extends JPanel {
     private final DeviceList devices = new DeviceList("Dispositivos cercanos y vinculados");
     private final JLabel status = new JLabel(" ");
     private final JProgressBar progress = new JProgressBar();
-    private final JButton syncOne = Ui.primary("Sincronizar con este", Icons.onAccent("refresh", 16), e -> {});
-    private final JButton link = new JButton("Vincular por proximidad…");
-    private final JButton allow = new JButton("Permitir vinculación");
-    private final JButton unlink = new JButton("Desvincular");
-    private final JButton retry = new JButton("Reintentar");
+    private final JButton syncOne = Ui.primary("Sincronizar con este", Icons.onFill("refresh", 16), e -> {});
+    private final JButton link = Ui.secondary("Vincular por proximidad…");
+    private final JButton allow = Ui.secondary("Permitir vinculación");
+    private final JButton unlink = Ui.secondary("Desvincular");
+    private final JButton retry = Ui.secondary("Reintentar");
     private final Banner banner = new Banner();
     private volatile List<ProximityService.Row> rows = List.of();
     private final Timer timer;
@@ -36,9 +36,9 @@ final class ProximityPanel extends JPanel {
         super(new BorderLayout(0, 10));
         this.owner = owner; this.sync = sync; this.onDataChanged = onDataChanged;
         setOpaque(false);
-        JLabel help = new JLabel("<html>Sincroniza directamente por la red local, sin servidor. Para vincular un equipo nuevo: en uno pulsa "
+        JLabel help = new JLabel("<html><body style='width:560px'>Sincroniza directamente por la red local, sin servidor. Para vincular un equipo nuevo: en uno pulsa "
                 + "«Permitir vinculación» y en el otro «Vincular por proximidad…»; compara el código de 6 cifras en las dos pantallas. "
-                + "Puertos: 47890/tcp y 47891/udp.</html>");
+                + "Puertos: 47890/tcp y 47891/udp.</body></html>");
         help.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.muted");
         JPanel head = new JPanel(new BorderLayout(0, 6));
         head.setOpaque(false);
@@ -57,7 +57,7 @@ final class ProximityPanel extends JPanel {
 
         progress.setIndeterminate(true);
         progress.setVisible(false);
-        progress.putClientProperty(FlatClientProperties.STYLE, "arc: 999");
+        
         JPanel south = new JPanel(new BorderLayout(0, 6));
         south.setOpaque(false);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -90,9 +90,10 @@ final class ProximityPanel extends JPanel {
     /** Línea de estado: los avisos llevan icono de alerta además del color. */
     private void setStatus(String text, boolean problem) {
         status.setText(text);
-        status.setIcon(problem ? Icons.colored("alert", 14, () -> Draw.p().error()) : null);
+        status.setIcon(problem ? Icons.ink("alert", 14) : null); // aviso = icono + texto en tinta, nunca solo color
         status.setIconTextGap(8);
-        status.setForeground(problem ? Draw.p().error() : Draw.p().dim());
+        status.setFont(problem ? Fonts.bold(12) : Fonts.regular(12));
+        status.setForeground(problem ? Draw.p().ink() : Draw.p().dim());
     }
 
     /** Aviso de «vinculación permitida» con la dirección para el otro equipo. */
@@ -112,11 +113,9 @@ final class ProximityPanel extends JPanel {
             if (text == null) return;
             Graphics2D g2 = Draw.quality(g);
             Palette p = Draw.p();
-            Draw.box(g2, p.accentTint(0.10), p.accent(), 0, 4, getWidth(), getHeight() - 8, Draw.RADIUS);
-            g2.setColor(p.accent());
-            g2.fillRect(0, 4, 4, getHeight() - 8);
-            g2.setFont(Fonts.bold(12));
-            g2.setColor(p.ink());
+            Draw.box(g2, p.fill(), null, 0, 4, getWidth(), getHeight() - 8, Draw.CUT_SM);
+            g2.setFont(Draw.label());
+            g2.setColor(p.onFill());
             FontMetrics fm = g2.getFontMetrics();
             g2.drawString(Draw.ellipsize(text, fm, getWidth() - 28), 16, Draw.baseline(fm, 0, getHeight()));
             g2.dispose();
@@ -167,11 +166,11 @@ final class ProximityPanel extends JPanel {
                     for (ProximityService.Row r : rows) {
                         List<Chips.Spec> chips = new java.util.ArrayList<>();
                         switch (r.state()) {
-                            case NEARBY -> chips.add(new Chips.Spec("Cercano", pal.onAccent(), pal.accent(), pal.accent()));
-                            case ONLINE -> chips.add(new Chips.Spec("En línea", pal.ok(), pal.ok(), null));
-                            case OFFLINE -> chips.add(new Chips.Spec("Desconectado", pal.muted(), pal.line3(), null));
+                            case NEARBY -> chips.add(Chips.Spec.inverted(Draw.G_OK + " Cercano"));
+                            case ONLINE -> chips.add(Chips.Spec.ok("En línea"));
+                            case OFFLINE -> chips.add(new Chips.Spec("Desconectado", pal.muted(), pal.lineHigh(), null));
                         }
-                        if (r.linked()) chips.add(new Chips.Spec("Vinculado", pal.secondary(), pal.secondary(), null));
+                        if (r.linked()) chips.add(Chips.Spec.plain("Vinculado", pal.dim()));
                         String meta = (r.address().isEmpty() ? "sin dirección" : r.address());
                         items.add(new DeviceList.Item(r.linked() ? "shield-check" : "smartphone", r.name(), meta, chips,
                                 r.lastSyncMillis() == 0 ? "sin sincronizar" : "sincronizado " + f.format(new Date(r.lastSyncMillis()))));

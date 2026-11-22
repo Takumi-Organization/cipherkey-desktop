@@ -35,7 +35,7 @@ public class Ring extends JComponent {
         repaint();
     }
 
-    /** Color del arco; {@code null} usa el acento. */
+    /** Color del arco; {@code null} usa la tinta. */
     public void setColor(Color color) {
         this.color = color;
         repaint();
@@ -47,9 +47,9 @@ public class Ring extends JComponent {
         Palette p = Draw.p();
         int size = Math.min(getWidth(), getHeight());
         int x = (getWidth() - size) / 2, y = (getHeight() - size) / 2;
-        Draw.ring(g2, value, x, y, size, thickness, p.line1(), color != null ? color : p.accent());
+        Draw.ring(g2, value, x, y, size, thickness, p.lineHigh(), color != null ? color : p.ink());
         g2.setColor(p.ink());
-        g2.setFont(Fonts.bold(centerSize));
+        g2.setFont(Fonts.thin(centerSize));
         FontMetrics fm = g2.getFontMetrics();
         int cy = sub.isEmpty() ? y + (size - fm.getHeight()) / 2 + fm.getAscent() : y + size / 2 - 2;
         g2.drawString(center, x + (size - fm.stringWidth(center)) / 2, cy);

@@ -40,7 +40,7 @@ public class SyncDialog extends JDialog {
 
     private static JLabel heading(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(Fonts.bold(24));
+        l.setFont(Fonts.thin(30));
         return l;
     }
 
@@ -62,7 +62,7 @@ public class SyncDialog extends JDialog {
         JPasswordField admin = Ui.passwordField(28);
         JTextField code = new JTextField(28);
 
-        VBox body = new VBox();
+        VBox body = new VBox.Scrolling();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         body.row(heading("Sincronización"), 0);
         body.row(Ui.muted("Entre tus dispositivos en la misma red no hace falta ningún servidor."), 4);
@@ -82,11 +82,11 @@ public class SyncDialog extends JDialog {
         body.row(new JSeparator(), 16);
         body.row(Ui.section(2, "¿Ya sincronizas otro dispositivo?"), 12);
         body.row(Ui.labeled("Código de emparejamiento", code), 8);
-        JButton pair = new JButton("Vincular con este código");
+        JButton pair = Ui.secondary("Vincular con este código");
         pair.addActionListener(e -> run("Vinculando…", () -> { sync.pair(code.getText(), name.getText().trim()); return null; },
                 r -> { onDataChanged.run(); rebuild(); }));
         body.row(Ui.buttonBar(pair), 12);
-        JButton close = new JButton("Cerrar");
+        JButton close = Ui.secondary("Cerrar");
         close.addActionListener(e -> dispose());
         body.row(Ui.buttonBar(close), 14);
         return body;
@@ -96,24 +96,23 @@ public class SyncDialog extends JDialog {
 
     private JComponent configuredView() {
         SyncService.Status st = sync.status();
-        VBox body = new VBox();
+        VBox body = new VBox.Scrolling();
         body.setBorder(BorderFactory.createEmptyBorder(22, 26, 20, 26));
         body.row(heading("Sincronización"), 0);
         String last = st.lastSyncMillis() == 0 ? "aún no" : DateFormat.getDateTimeInstance().format(new Date(st.lastSyncMillis()));
         String route = sync.lastRoute().isEmpty() ? "" : "  •  Vía: " + sync.lastRoute();
         body.row(Ui.muted("Última sincronización: " + last + "  •  Pendientes: " + st.pending() + "  •  Conflictos: " + st.conflicts() + route), 4);
         if (st.error() != null) {
-            JLabel err = new JLabel(st.error(), Icons.colored("alert", 14, () -> Draw.p().error()), SwingConstants.LEADING);
-            err.setIconTextGap(8);
-            err.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger");
+            Ui.ErrorLabel err = new Ui.ErrorLabel();
+            err.setText(st.error());
             body.row(err, 4);
         }
 
-        JButton now = Ui.primary("Sincronizar ahora", Icons.onAccent("refresh", 16), e -> run("Sincronizando…",
+        JButton now = Ui.primary("Sincronizar ahora", Icons.onFill("refresh", 16), e -> run("Sincronizando…",
                 () -> sync.syncNow(), r -> { onDataChanged.run(); rebuild(); }));
-        JButton pairCode = new JButton("Vincular otro dispositivo…");
+        JButton pairCode = Ui.secondary("Vincular otro dispositivo…");
         pairCode.addActionListener(e -> run("Generando código…", sync::newPairingCode, this::showPairingCode));
-        JButton off = new JButton("Desactivar");
+        JButton off = Ui.secondary("Desactivar");
         off.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Este dispositivo dejará de sincronizar. Tus datos locales se conservan\n"
                     + "y no se borra nada del servidor. ¿Continuar?", "Desactivar", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
@@ -134,7 +133,7 @@ public class SyncDialog extends JDialog {
         body.row(sp, 8);
         List<ServerClient.DeviceInfo>[] devices = new List[]{List.of()};
         String[] self = {""};
-        JButton revoke = new JButton("Revocar dispositivo seleccionado");
+        JButton revoke = Ui.secondary("Revocar dispositivo seleccionado");
         revoke.addActionListener(e -> {
             int i = table.getSelectedIndex();
             if (i < 0) return;
@@ -164,15 +163,15 @@ public class SyncDialog extends JDialog {
             });
             body.row(new JScrollPane(list), 6);
             body.row(new JScrollPane(diff), 6);
-            JButton mine = new JButton("Quedarme con la mía");
-            JButton other = new JButton("Usar la otra");
-            JButton both = new JButton("Conservar ambas");
+            JButton mine = Ui.secondary("Quedarme con la mía");
+            JButton other = Ui.secondary("Usar la otra");
+            JButton both = Ui.secondary("Conservar ambas");
             mine.addActionListener(e -> resolve(list, conflicts, SyncService.Choice.KEEP_MINE));
             other.addActionListener(e -> resolve(list, conflicts, SyncService.Choice.TAKE_OTHER));
             both.addActionListener(e -> resolve(list, conflicts, SyncService.Choice.KEEP_BOTH));
             body.row(Ui.buttonBar(mine, other, both), 6);
         }
-        JButton close = new JButton("Cerrar");
+        JButton close = Ui.secondary("Cerrar");
         close.addActionListener(e -> dispose());
         body.row(Ui.buttonBar(close), 14);
         return body;
@@ -192,8 +191,8 @@ public class SyncDialog extends JDialog {
                     List<DeviceList.Item> items = new java.util.ArrayList<>();
                     for (ServerClient.DeviceInfo d : holder[0]) {
                         List<Chips.Spec> chips = new java.util.ArrayList<>();
-                        if (d.deviceId().equals(self[0])) chips.add(new Chips.Spec("Este equipo", pal.onAccent(), pal.accent(), pal.accent()));
-                        chips.add(d.revoked() ? new Chips.Spec("Revocado", pal.error(), pal.error(), null) : new Chips.Spec("Activo", pal.ok(), pal.ok(), null));
+                        if (d.deviceId().equals(self[0])) chips.add(Chips.Spec.inverted("Este equipo"));
+                        chips.add(d.revoked() ? Chips.Spec.error("Revocado") : Chips.Spec.ok("Activo"));
                         items.add(new DeviceList.Item(d.deviceId().equals(self[0]) ? "key" : "smartphone", d.name(), "alta " + f.format(new Date(d.createdAt())),
                                 chips, d.lastSeen() == 0 ? "sin actividad" : "visto " + f.format(new Date(d.lastSeen()))));
                     }

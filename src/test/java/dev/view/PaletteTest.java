@@ -3,54 +3,73 @@ package dev.view;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Accesibilidad del tema: contraste WCAG AA de texto y acento en oscuro y claro, con cada acento predefinido. */
+/** Tokens de Takumi: contraste WCAG AA de la tinta y monocromo estricto (ningún color de la paleta tiene saturación). */
 class PaletteTest {
+    private static final Palette[] BOTH = {Palette.DARK, Palette.LIGHT};
+
     @Test
-    void inkAndSecondaryTextMeetAaOnBothSurfaces() {
-        for (boolean dark : new boolean[]{true, false}) {
-            Palette p = Palette.resolve(dark, Palette.DEFAULT_ACCENT, null);
+    void inkMeetsContrastOnEverySurface() {
+        for (Palette p : BOTH) {
+            for (Color surface : new Color[]{p.paper(), p.raised(), p.high()}) {
+                assertTrue(Palette.contrast(p.ink(), surface) >= 7, "tinta sobre " + Palette.toHex(surface));
+                assertTrue(Palette.contrast(p.dim(), surface) >= 4.5, "tinta suave sobre " + Palette.toHex(surface));
+            }
+        }
+    }
+
+    @Test
+    void mutedTextMeetsAaOnPaperAndPanel() {
+        // La tinta apagada es solo para texto secundario sobre fondo y panel (no sobre el elevado del modo claro).
+        for (Palette p : BOTH) {
             for (Color surface : new Color[]{p.paper(), p.raised()}) {
-                assertTrue(Palette.contrast(p.ink(), surface) >= 7, "tinta " + dark);
-                assertTrue(Palette.contrast(p.dim(), surface) >= 4.5, "dim " + dark);
-                assertTrue(Palette.contrast(p.muted(), surface) >= 4.5, "muted " + dark);
-                assertTrue(Palette.contrast(p.error(), surface) >= 4.5, "error " + dark);
-                assertTrue(Palette.contrast(p.ok(), surface) >= 4.5, "ok " + dark);
-                assertTrue(Palette.contrast(p.warn(), surface) >= 4.5, "warn " + dark);
+                assertTrue(Palette.contrast(p.muted(), surface) >= 4.5, "apagada " + p.dark() + " sobre " + Palette.toHex(surface));
             }
         }
     }
 
     @Test
-    void everyPresetAccentWorksAsTextAndAsFill() {
-        for (boolean dark : new boolean[]{true, false}) {
-            for (Palette.Accent a : Palette.ACCENTS) {
-                Palette p = Palette.resolve(dark, a.key(), null);
-                assertEquals(a.on(dark), p.accent());
-                assertTrue(Palette.contrast(p.accent(), p.paper()) >= 4.5, a.key() + " como texto, oscuro=" + dark);
-                assertTrue(Palette.contrast(p.accent(), p.raised()) >= 4.5, a.key() + " sobre panel, oscuro=" + dark);
-                assertTrue(Palette.contrast(p.onAccent(), p.accent()) >= 4.5, a.key() + " texto sobre acento, oscuro=" + dark);
-            }
+    void invertedPairsMeetAa() {
+        for (Palette p : BOTH) {
+            assertTrue(Palette.contrast(p.onFill(), p.fill()) >= 7, "texto sobre inversión " + p.dark());
+            assertEquals(p.ink(), p.fill());
+            assertEquals(p.paper(), p.onFill());
         }
     }
 
     @Test
-    void customAccentIsPulledToReadableContrast() {
-        Palette dark = Palette.resolve(true, "custom", "#222222");
-        assertTrue(Palette.contrast(dark.accent(), dark.paper()) >= 3.0);
-        Palette light = Palette.resolve(false, "custom", "#F0F0F0");
-        assertTrue(Palette.contrast(light.accent(), light.paper()) >= 3.0);
-        assertTrue(Palette.contrast(dark.onAccent(), dark.accent()) >= 4.5);
+    void paletteIsStrictlyMonochrome() {
+        for (Palette p : BOTH) {
+            for (Color c : new Color[]{p.paper(), p.raised(), p.high(), p.ink(), p.dim(), p.muted(), p.faint(), p.line(), p.lineHigh()}) {
+                assertEquals(0f, Palette.saturation(c), 1e-6, "color con saturación: " + Palette.toHex(c));
+            }
+        }
+        for (Color c : Palette.GRAYS) assertEquals(0f, Palette.saturation(c), 1e-6);
     }
 
     @Test
-    void unknownOrInvalidAccentFallsBackToDefault() {
-        assertEquals(Palette.resolve(true, Palette.DEFAULT_ACCENT, null).accent(), Palette.resolve(true, "nope", null).accent());
-        assertEquals(Palette.resolve(true, Palette.DEFAULT_ACCENT, null).accent(), Palette.resolve(true, "custom", "zzz").accent());
-        assertNull(Palette.parseHex("12345"));
-        assertEquals(new Color(0x12AB34), Palette.parseHex("#12ab34"));
-        assertEquals("#12AB34", Palette.toHex(new Color(0x12AB34)));
+    void tokensMatchTakumiDesign() {
+        assertEquals("#000000", Palette.toHex(Palette.DARK.paper()));
+        assertEquals("#F2F2F2", Palette.toHex(Palette.DARK.ink()));
+        assertEquals("#F4F4F4", Palette.toHex(Palette.LIGHT.paper()));
+        assertEquals("#0A0A0A", Palette.toHex(Palette.LIGHT.ink()));
+        assertEquals(Palette.DARK, Palette.of(true));
+        assertEquals(Palette.LIGHT, Palette.of(false));
+    }
+
+    @Test
+    void themeDefaultsInjectOnlyGrayColors() {
+        for (Palette p : BOTH) {
+            Map<String, String> m = ThemeManager.defaults(p);
+            for (Map.Entry<String, String> e : m.entrySet()) {
+                String v = e.getValue();
+                if (!v.matches("#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?")) continue;
+                Color c = new Color(Integer.parseInt(v.substring(1, 7), 16));
+                assertEquals(0f, Palette.saturation(c), 1e-6, e.getKey() + " = " + v + " no es gris");
+            }
+        }
     }
 }

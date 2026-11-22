@@ -168,17 +168,17 @@ public class EntryTable extends JTable {
 
             g2.setColor(p.paper());
             g2.fillRect(0, 0, w, h);
+            // seleccionada = inversión (fondo tinta, texto fondo); el ratón encima = panel elevado
+            Color main = selected ? p.onFill() : p.ink(), sub = selected ? p.onFill() : p.muted();
             if (selected) {
+                g2.setColor(p.fill());
+                g2.fillRect(0, 0, w, h);
+            } else if (hover) {
                 g2.setColor(p.high());
                 g2.fillRect(0, 0, w, h);
-                g2.setColor(p.accent());
-                g2.fillRect(0, 0, 4, h);
-            } else if (hover) {
-                g2.setColor(p.accentTint(0.06));
-                g2.fillRect(0, 0, w, h);
             }
-            g2.setColor(p.line1());
-            g2.fillRect(18, h - 1, w - 36, 1);
+            g2.setColor(p.line());
+            g2.fillRect(0, h - 1, w, 1);
 
             int x = 20;
             avatar.paintIcon(this, g2, x, (h - 40) / 2);
@@ -187,25 +187,26 @@ public class EntryTable extends JTable {
             // columna derecha (se calcula primero para saber cuánto sitio queda al texto)
             int right = w - 18;
             if (entry.isFavorite()) {
-                Icon star = Icons.colored("star-filled", 14, () -> Draw.p().warn());
+                Icon star = Icons.colored("star-filled", 14, () -> main);
                 star.paintIcon(this, g2, right - 14, (h - 14) / 2);
                 right -= 14 + 14;
             }
             boolean wide = w >= 620, mid = w >= 500;
             if (wide && hl != null && !hl.has(VaultHealth.Flag.EMPTY)) {
-                Draw.segments(g2, hl.level(), false, right - 52, (h - 5) / 2, 52, 5, 2);
+                if (selected) Draw.segments(g2, hl.level(), false, right - 52, (h - 5) / 2, 52, 5, 2, p.onFill(), Palette.mix(p.fill(), p.onFill(), 0.35));
+                else Draw.segments(g2, hl.level(), false, right - 52, (h - 5) / 2, 52, 5, 2);
                 right -= 52 + 16;
             }
-            // avisos de salud como iconos con color de estado (nunca solo color: icono distinto por tipo)
+            // avisos de salud como iconos (nunca solo color: icono distinto por tipo)
             if (hl != null && mid) {
-                right = flagIcon(g2, hl.has(VaultHealth.Flag.EMPTY) || hl.has(VaultHealth.Flag.WEAK), "alert", p.error(), right, h);
-                right = flagIcon(g2, hl.has(VaultHealth.Flag.REUSED), "repeat", p.warn(), right, h);
-                right = flagIcon(g2, hl.has(VaultHealth.Flag.OLD), "clock", p.muted(), right, h);
+                right = flagIcon(g2, hl.has(VaultHealth.Flag.EMPTY) || hl.has(VaultHealth.Flag.WEAK), "alert", main, right, h);
+                right = flagIcon(g2, hl.has(VaultHealth.Flag.REUSED), "repeat", main, right, h);
+                right = flagIcon(g2, hl.has(VaultHealth.Flag.OLD), "clock", sub, right, h);
             }
             if (mid && entry.getTotpSecret() != null && !entry.getTotpSecret().isBlank()) {
                 g2.setFont(Draw.tracked(Fonts.bold(10), 0.06f));
                 int cw = Draw.chipWidth(g2, "2FA");
-                Draw.chip(g2, "2FA", right - cw, (h - 18) / 2, p.secondary(), p.line2(), null);
+                Draw.chip(g2, "2FA", right - cw, (h - 18) / 2, selected ? p.onFill() : p.dim(), selected ? p.onFill() : p.lineHigh(), null);
                 right -= cw + 10;
             }
             String cat = entry.getCategory();
@@ -213,22 +214,22 @@ public class EntryTable extends JTable {
                 g2.setFont(Draw.tracked(Fonts.bold(10), 0.06f));
                 String c = Draw.ellipsize(cat.toUpperCase(), g2.getFontMetrics(), 110);
                 int cw = Draw.chipWidth(g2, c);
-                Draw.chip(g2, c, right - cw, (h - 18) / 2, p.dim(), p.line2(), null);
+                Draw.chip(g2, c, right - cw, (h - 18) / 2, selected ? p.onFill() : p.dim(), selected ? p.onFill() : p.lineHigh(), null);
                 right -= cw + 12;
             }
 
             int textW = Math.max(40, right - x - 8);
             g2.setFont(Fonts.bold(14));
             FontMetrics fm = g2.getFontMetrics();
-            g2.setColor(p.ink());
+            g2.setColor(main);
             g2.drawString(Draw.ellipsize(nz(entry.getTitle()), fm, textW), x, h / 2 - 4);
-            g2.setFont(Fonts.regular(12));
+            g2.setFont(Fonts.mono(11));
             fm = g2.getFontMetrics();
-            g2.setColor(p.muted());
-            String sub = subtitle(entry);
-            g2.drawString(Draw.ellipsize(sub, fm, textW), x, h / 2 + 15);
+            g2.setColor(sub);
+            String subText = subtitle(entry);
+            g2.drawString(Draw.ellipsize(subText, fm, textW), x, h / 2 + 15);
 
-            if (focused) Draw.focusRing(g2, 2, 2, w - 4, h - 4, 4);
+            if (focused) Draw.focusRing(g2, 2, 2, w - 4, h - 4, 0, p.onFill());
             g2.dispose();
         }
 

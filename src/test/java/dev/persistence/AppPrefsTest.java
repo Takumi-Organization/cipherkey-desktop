@@ -39,9 +39,19 @@ class AppPrefsTest {
     @Test
     void defaults() {
         assertTrue(AppPrefs.isDark(), "el tema por defecto es oscuro");
-        assertEquals("ambar", AppPrefs.accent(), "el acento por defecto es Oro");
         assertEquals(5, AppPrefs.autoLockMinutes());
         assertTrue(AppPrefs.recentVaults().isEmpty());
+    }
+
+    @Test
+    void legacyThemePreferencesFallBackToDefault() {
+        // preferencias de Ryoku Glass: acento guardado y un valor de tema que no es booleano
+        testNode.put("accent", "bermellon");
+        testNode.put("accentCustom", "#FF5A47");
+        testNode.put("dark", "washi");
+        assertTrue(AppPrefs.isDark(), "un valor de tema desconocido cae a Takumi oscuro");
+        testNode.putBoolean("dark", false);
+        assertFalse(AppPrefs.isDark(), "la elección de papel (claro) se conserva");
     }
 
     @Test

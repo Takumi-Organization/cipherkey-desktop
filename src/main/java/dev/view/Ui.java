@@ -10,9 +10,10 @@ import java.awt.event.ActionListener;
 public final class Ui {
     private Ui() {}
 
+    /** Título de diálogo: Outfit 200 (fino), como los títulos de Takumi. */
     public static JLabel title(String text) {
         JLabel l = new JLabel(text);
-        l.putClientProperty(FlatClientProperties.STYLE_CLASS, "h3");
+        l.setFont(Fonts.thin(26));
         return l;
     }
 
@@ -24,7 +25,7 @@ public final class Ui {
         return l;
     }
 
-    /** Micro-etiqueta: mayúsculas, negrita, espaciado .08em (etiquetas de campo y de sección). */
+    /** Micro-etiqueta de Takumi: JetBrains Mono, mayúsculas, espaciada (etiquetas de campo y de sección). */
     public static JLabel eyebrow(String text) {
         JLabel l = new JLabel(text.toUpperCase());
         l.setFont(Draw.label());
@@ -32,9 +33,14 @@ public final class Ui {
         return l;
     }
 
-    /** Título de sección: micro-etiqueta gris en mayúsculas (el número se conserva en la firma por compatibilidad, no se pinta). */
+    /** Título de sección: micro-etiqueta en mayúsculas (el número se conserva en la firma por compatibilidad, no se pinta). */
     public static JLabel section(int n, String text) {
         return eyebrow(text);
+    }
+
+    /** Fuente de las etiquetas de botón: Outfit 500 en mayúsculas espaciadas. */
+    static Font buttonFont() {
+        return Draw.tracked(Fonts.bold(12), 0.12f);
     }
 
     /** Botón con icono, sin borde, para barras de herramientas y acciones inline. */
@@ -47,21 +53,53 @@ public final class Ui {
         return b;
     }
 
+    /** Botón primario: inversión (fondo tinta, texto fondo), esquina cortada y etiqueta en mayúsculas espaciada. */
     public static JButton primary(String text, Icon icon, ActionListener action) {
-        JButton b = new JButton(text, icon);
-        b.putClientProperty(FlatClientProperties.STYLE,
-                "background: $Button.default.background; foreground: $Button.default.foreground; borderWidth: 0;"
-                        + "hoverBackground: $Button.default.hoverBackground; pressedBackground: $Button.default.pressedBackground;"
-                        + "font: bold");
+        JButton b = new JButton(text == null ? null : text.toUpperCase(), icon);
+        b.putClientProperty(TakumiButtonUI.PRIMARY, Boolean.TRUE);
+        b.setFont(buttonFont());
+        b.setIconTextGap(10);
         b.addActionListener(action);
         return b;
     }
 
-    public static JButton danger(String text, Icon icon, ActionListener action) {
-        JButton b = new JButton(text, icon);
-        b.putClientProperty(FlatClientProperties.STYLE, "foreground: $App.danger; borderColor: $App.danger");
+    /** Botón secundario: solo borde de línea alta (el borde pasa a tinta al pasar el ratón), etiqueta en mayúsculas. */
+    public static JButton secondary(String text) {
+        JButton b = new JButton(text.toUpperCase());
+        b.setFont(buttonFont());
+        return b;
+    }
+
+    public static JButton secondary(String text, Icon icon, ActionListener action) {
+        JButton b = secondary(text);
+        b.setIcon(icon);
+        b.setIconTextGap(10);
         b.addActionListener(action);
         return b;
+    }
+
+    /** Acción destructiva: secundario con borde de tinta (Takumi no usa rojo). */
+    public static JButton danger(String text, Icon icon, ActionListener action) {
+        JButton b = secondary(text, icon, action);
+        b.putClientProperty(FlatClientProperties.STYLE, "borderColor: $App.fill");
+        return b;
+    }
+
+    /** Mensaje de error: icono ✕ (alerta) + texto en negrita; el icono solo aparece si hay texto. */
+    public static final class ErrorLabel extends JLabel {
+        public ErrorLabel() {
+            super(" ");
+            putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
+            setFont(Fonts.bold(12));
+            setIconTextGap(8);
+        }
+
+        @Override
+        public void setText(String text) {
+            super.setText(text);
+            boolean has = text != null && !text.isBlank();
+            setIcon(has ? Icons.get("x", 14) : null);
+        }
     }
 
     /** Etiqueta pequeña encima del componente, apilados en vertical. */
@@ -73,7 +111,7 @@ public final class Ui {
         return p;
     }
 
-    /** Marca un campo con error (borde rojo) hasta que el usuario lo edite. */
+    /** Marca un campo con error (borde de tinta; el mensaje «✕ …» va aparte) hasta que el usuario lo edite. */
     public static void markError(JComponent c) {
         c.putClientProperty(FlatClientProperties.OUTLINE, FlatClientProperties.OUTLINE_ERROR);
         c.requestFocusInWindow();

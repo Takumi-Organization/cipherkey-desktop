@@ -6,30 +6,23 @@ import java.awt.geom.Arc2D;
 import java.awt.geom.Path2D;
 
 /**
- * Ilustración «plano a tinta»: trazo de 2 px en tinta, un relleno de acento desplazado (impresión mal registrada),
- * fondo de puntos, disco-sol al 12 % y marcas «+». Objetos de software, no figuras.
+ * Ilustración de línea fina, monocroma: marcos de trazo en tinta con la esquina superior derecha cortada, marcas «+».
+ * Objetos de software, no figuras.
  */
 public final class Art {
     public enum Kind { VAULT, SELECT, LOCK, SYNC }
 
     private Art() {}
 
-    /** Fondo: puntos y disco-sol. */
-    public static void backdrop(Graphics2D g, int x, int y, int w, int h, int sunCx, int sunCy, int sunR) {
-        Palette p = Draw.p();
-        Draw.dotGrid(g, x, y, w, h, Palette.alpha(p.ink(), 0.16));
-        Draw.sun(g, sunCx, sunCy, sunR, p.accentTint(0.12));
-    }
-
-    /** Ventana plana con marco de esquinas suaves (sin sombra desplazada: Ryoku Glass no usa sombras) y contenido según el tipo. */
+    /** Ventana plana con marco cortado (sin sombras) y contenido de trazo según el tipo. */
     public static void window(Graphics2D g, Kind kind, int x, int y, int w, int h) {
         Palette p = Draw.p();
         g.setColor(p.paper());
-        g.fillRoundRect(x, y, w, h, Draw.RADIUS, Draw.RADIUS);
+        g.fill(Draw.cutShape(x, y, w, h, Draw.CUT_LG));
         g.setColor(p.ink());
-        g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.drawRoundRect(x, y, w, h, Draw.RADIUS, Draw.RADIUS);
-        g.drawLine(x, y + 24, x + w, y + 24);
+        g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+        g.draw(Draw.cutShape(x + 0.5f, y + 0.5f, w - 1, h - 1, Draw.CUT_LG));
+        g.drawLine(x, y + 24, x + w - 1, y + 24);
         for (int i = 0; i < 3; i++) g.drawRect(x + 10 + i * 14, y + 8, 8, 8);
         g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_SQUARE, BasicStroke.JOIN_MITER));
         int bx = x + 16, by = y + 40, bw = w - 32, bh = h - 56;
@@ -52,12 +45,32 @@ public final class Art {
             }
             case LOCK -> lock(g, x + w / 2, y + 24 + (h - 24) / 2, Math.min(w, h - 24) / 3);
             case SYNC -> {
-                g.drawOval(bx, by, 28, 28);
-                g.drawOval(bx + bw - 28, by + bh - 28, 28, 28);
+                g.drawRect(bx, by, 28, 28);
+                g.drawRect(bx + bw - 28, by + bh - 28, 28, 28);
                 g.drawLine(bx + 28, by + 14, bx + bw - 14, by + 14);
                 g.drawLine(bx + bw - 14, by + 14, bx + bw - 14, by + bh - 28);
             }
         }
+    }
+
+    private static java.awt.image.BufferedImage mark;
+
+    /** Marca de Takumi (la misma del icono de la aplicación) en una baldosa negra de {@code size} px con la esquina cortada. */
+    public static void mark(Graphics2D g, int x, int y, int size) {
+        Palette p = Draw.p();
+        if (mark == null) {
+            try {
+                mark = javax.imageio.ImageIO.read(Art.class.getResource("/img/icon.png"));
+            } catch (Exception | Error e) {
+                mark = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            }
+        }
+        Shape old = g.getClip();
+        g.clip(Draw.cutShape(x, y, size, size, size > 30 ? Draw.CUT_SM : 8));
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.drawImage(mark, x, y, size, size, null);
+        g.setClip(old);
+        Draw.box(g, null, p.dark() ? p.lineHigh() : p.ink(), x, y, size, size, size > 30 ? Draw.CUT_SM : 8);
     }
 
     /** Candado de trazo: cuerpo, arco y ojo de cerradura. */
@@ -67,7 +80,7 @@ public final class Art {
         Path2D shackle = new Path2D.Float();
         shackle.append(new Arc2D.Float(cx - u * 0.65f, cy - u * 1.55f, u * 1.3f, u * 1.8f, 0, 180, Arc2D.OPEN), false);
         g.draw(shackle);
-        g.fillOval(cx - 4, cy + u / 4, 8, 8);
+        g.fillRect(cx - 4, cy + u / 4, 8, 8);
         g.drawLine(cx, cy + u / 4 + 8, cx, cy + u / 4 + 20);
     }
 
@@ -81,13 +94,11 @@ public final class Art {
                 int w = getWidth(), h = getHeight();
                 int ww = Math.min(240, w - 80), wh = Math.min(170, h - 80);
                 int x = (w - ww) / 2, y = (h - wh) / 2 - 12;
-                backdrop(g2, 0, 0, w, h, x + ww + 10, y + wh / 2, 70);
                 window(g2, kind, x, y, ww, wh);
                 Draw.cross(g2, x - 22, y - 10, 6, p.ink());
                 Draw.cross(g2, x + ww + 28, y + wh + 22, 6, p.ink());
                 g2.setFont(Draw.label());
                 g2.setColor(p.muted());
-                FontMetrics fm = g2.getFontMetrics();
                 g2.drawString(caption.toUpperCase(), x, y + wh + 40);
                 g2.dispose();
             }

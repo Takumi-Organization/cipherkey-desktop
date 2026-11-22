@@ -159,7 +159,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         syncButton.setToolTipText("Sincronización y dispositivos cercanos (Ctrl+Mayús+S)");
         JButton more = Ui.iconButton(Icons.get("more", 18), "Más opciones", e -> {});
         more.addActionListener(e -> buildMoreMenu().show(more, 0, more.getHeight()));
-        JButton add = Ui.primary("Nueva entrada", Icons.onAccent("plus", 16), e -> addEntry());
+        JButton add = Ui.primary("Nueva entrada", Icons.onFill("plus", 16), e -> addEntry());
         add.setToolTipText("Ctrl+N");
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -280,7 +280,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         JComponent art = Art.panel(kind, caption);
         JLabel t = new JLabel(title);
-        t.setFont(Fonts.bold(20));
+        t.setFont(Fonts.thin(26));
         JLabel d = Ui.muted(text);
         for (JComponent c : new JComponent[]{art, t, d}) c.setAlignmentX(CENTER_ALIGNMENT);
         box.add(art);
@@ -289,7 +289,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
         box.add(Box.createVerticalStrut(6));
         box.add(d);
         if (buttonText != null) {
-            JButton b = Ui.primary(buttonText, Icons.onAccent("plus", 16), e -> addEntry());
+            JButton b = Ui.primary(buttonText, Icons.onFill("plus", 16), e -> addEntry());
             b.setAlignmentX(CENTER_ALIGNMENT);
             box.add(Box.createVerticalStrut(18));
             box.add(b);
@@ -391,6 +391,7 @@ public class MainFrame extends JFrame implements DetailPanel.Actions {
     }
 
     private void updateCard() {
+        detail.setVisible(!healthShown); // la salud ocupa todo el ancho: con el detalle a un lado se aprieta el panel
         if (healthShown) cards.show(cardPanel, CARD_HEALTH);
         else if (manager.getEntries().isEmpty()) cards.show(cardPanel, CARD_EMPTY);
         else if (table.getRowCount() == 0) cards.show(cardPanel, CARD_NO_RESULTS);

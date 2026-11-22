@@ -71,18 +71,21 @@ final class DeviceList extends JList<DeviceList.Item> {
             Graphics2D g2 = Draw.quality(g);
             Palette p = Draw.p();
             int w = getWidth(), h = getHeight();
-            Draw.box(g2, selected ? p.high() : p.raised(), selected ? p.accent() : p.line1(), 0, 2, w, h - 4, Draw.RADIUS);
-            Draw.box(g2, p.paper(), p.line2(), 14, (h - 38) / 2, 38, 38, Draw.RADIUS);
-            Icons.get(item.icon(), 20).paintIcon(this, g2, 23, (h - 20) / 2);
+            // seleccionado = inversión (fondo tinta, texto fondo)
+            Color main = selected ? p.onFill() : p.ink(), sub = selected ? p.onFill() : p.muted();
+            Draw.box(g2, selected ? p.fill() : p.raised(), selected ? p.fill() : p.lineHigh(), 0, 2, w, h - 4, Draw.CUT_SM);
+            Draw.box(g2, selected ? p.fill() : p.paper(), selected ? p.onFill() : p.lineHigh(), 14, (h - 38) / 2, 38, 38, 0);
+            Color iconColor = main;
+            Icons.colored(item.icon(), 20, () -> iconColor).paintIcon(this, g2, 23, (h - 20) / 2);
             int x = 66;
             g2.setFont(Fonts.bold(14));
             FontMetrics fm = g2.getFontMetrics();
-            g2.setColor(p.ink());
+            g2.setColor(main);
             int right = w - 14;
             if (item.right() != null && !item.right().isEmpty()) {
                 g2.setFont(Fonts.regular(11));
                 FontMetrics rf = g2.getFontMetrics();
-                g2.setColor(p.muted());
+                g2.setColor(sub);
                 g2.drawString(item.right(), right - rf.stringWidth(item.right()), h / 2 + 15);
             }
             int cx = right;
@@ -90,16 +93,17 @@ final class DeviceList extends JList<DeviceList.Item> {
                 Chips.Spec s = item.chips().get(i);
                 int cw = Draw.chipWidth(g2, s.text());
                 cx -= cw;
-                Draw.chip(g2, s.text(), cx, h / 2 - 20, s.fg(), s.border(), s.fill());
+                if (selected) Draw.chip(g2, s.text(), cx, h / 2 - 20, p.onFill(), p.onFill(), null);
+                else Draw.chip(g2, s.text(), cx, h / 2 - 20, s.fg(), s.border(), s.fill());
                 cx -= 6;
             }
             g2.setFont(Fonts.bold(14));
-            g2.setColor(p.ink());
+            g2.setColor(main);
             g2.drawString(Draw.ellipsize(item.name(), fm, Math.max(60, cx - x - 8)), x, h / 2 - 3);
             g2.setFont(Fonts.regular(11));
-            g2.setColor(p.muted());
+            g2.setColor(sub);
             g2.drawString(Draw.ellipsize(item.meta(), g2.getFontMetrics(), Math.max(60, cx - x - 8)), x, h / 2 + 15);
-            if (focus) Draw.focusRing(g2, 0, 1, w, h - 2, 6);
+            if (focus) Draw.focusRing(g2, 2, 3, w - 4, h - 6, 0, p.onFill());
             g2.dispose();
         }
     }

@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 public class HealthView extends JPanel {
     private final Consumer<String> applyQuery;
     private final Consumer<PasswordEntry> openEntry;
-    private final Ring ring = new Ring(190, 14, 60, 10);
+    private final Ring ring = new Ring(190, 10, 64, 10);
     private final JLabel headline = new JLabel();
     private final JLabel detail = Ui.muted(" ");
     private final GradeChip grade = new GradeChip();
@@ -37,16 +37,15 @@ public class HealthView extends JPanel {
         this.openEntry = openEntry;
         setOpaque(false);
 
-        headline.setFont(Fonts.bold(22));
-        JPanel text = new JPanel(new GridLayout(0, 1, 0, 6));
-        text.setOpaque(false);
+        headline.setFont(Fonts.thin(24));
+        VBox text = new VBox();
         JPanel gradeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         gradeRow.setOpaque(false);
         gradeRow.add(grade);
-        text.add(Ui.section(0, "Salud de la bóveda"));
-        text.add(headline);
-        text.add(detail);
-        text.add(gradeRow);
+        text.row(Ui.section(0, "Salud de la bóveda"), 0);
+        text.row(headline, 6);
+        text.row(detail, 4);
+        text.row(gradeRow, 8);
 
         JPanel top = new JPanel(new BorderLayout(32, 0));
         top.setOpaque(false);
@@ -97,7 +96,7 @@ public class HealthView extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = Draw.quality(g);
-                Draw.box(g2, Draw.p().raised(), Draw.p().line1(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
+                Draw.box(g2, Draw.p().raised(), Draw.p().lineHigh(), 0, 0, getWidth(), getHeight(), Draw.CUT_MD);
                 g2.dispose();
             }
         };
@@ -119,7 +118,7 @@ public class HealthView extends JPanel {
         headline.setText(headlineFor(r.grade()));
         detail.setText(none ? "Añade entradas para ver su estado." : r.healthy() + " de " + r.total() + " entradas sin ningún aviso"
                 + (r.issues() == 0 ? "." : " • " + r.issues() + (r.issues() == 1 ? " aviso" : " avisos") + " por revisar."));
-        grade.set(r.grade(), colorFor(r));
+        grade.set(r.grade());
         weak.set(r.weak());
         reused.set(r.reused());
         old.set(r.old());
@@ -129,16 +128,6 @@ public class HealthView extends JPanel {
         fixList.set(r);
         getAccessibleContext().setAccessibleName("Salud de la bóveda: " + (none ? "sin datos" : r.score() + " de 100, " + r.grade().label()));
         repaint();
-    }
-
-    private static Color colorFor(VaultHealth.Result r) {
-        Palette p = Draw.p();
-        return switch (r.grade()) {
-            case EXCELLENT, GOOD -> p.ok();
-            case FAIR -> p.warn();
-            case CRITICAL -> p.error();
-            case NONE -> p.faint();
-        };
     }
 
     static String headlineFor(VaultHealth.Grade g) {
@@ -151,27 +140,31 @@ public class HealthView extends JPanel {
         };
     }
 
-    /** Pastilla con la nota («Excelente», «Mejorable»…): texto y color, nunca solo color. */
+    /** Pastilla con la nota («Excelente», «Mejorable»…): glifo (● ▲ ✕) y texto, nunca solo color; la crítica va invertida. */
     private static final class GradeChip extends JComponent {
-        private String text = "";
-        private Color color = Color.GRAY;
+        private Chips.Spec spec = Chips.Spec.plain("", Color.GRAY);
 
-        void set(VaultHealth.Grade g, Color c) {
-            this.text = "Nota: " + g.label();
-            this.color = c;
+        void set(VaultHealth.Grade g) {
+            String t = "Nota: " + g.label();
+            this.spec = switch (g) {
+                case EXCELLENT, GOOD -> Chips.Spec.ok(t);
+                case FAIR -> Chips.Spec.warn(t);
+                case CRITICAL -> Chips.Spec.error(t);
+                case NONE -> Chips.Spec.plain(t, Draw.p().muted());
+            };
             revalidate();
             repaint();
         }
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(getFontMetrics(Draw.tracked(Fonts.bold(10), 0.06f)).stringWidth(text.toUpperCase()) + 20, 22);
+            return new Dimension(getFontMetrics(Draw.chipFont()).stringWidth(spec.text().toUpperCase()) + 20, 22);
         }
 
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = Draw.quality(g);
-            Draw.chip(g2, text, 0, 2, color, color, null);
+            Draw.chip(g2, spec.text(), 0, 2, spec.fg(), spec.border(), spec.fill());
             g2.dispose();
         }
     }
@@ -210,18 +203,17 @@ public class HealthView extends JPanel {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = Draw.quality(g);
             Palette p = Draw.p();
-            Color c = n == 0 ? p.ok() : label.startsWith("Antig") ? p.muted() : label.startsWith("Rep") ? p.warn() : p.error();
-            Draw.box(g2, getModel().isRollover() && n > 0 ? p.high() : p.raised(), p.line1(), 0, 0, getWidth(), getHeight(), Draw.RADIUS);
-            g2.setColor(c);
-            g2.fillRect(0, 0, getWidth(), 3);
+            // con avisos: icono propio del tipo y cifra en tinta; sin avisos: ✓ y cifra apagada (nunca solo color)
+            Color c = n == 0 ? p.muted() : p.ink();
+            boolean hot = getModel().isRollover() && n > 0;
+            Draw.box(g2, hot ? p.high() : p.raised(), hot || isFocusOwner() ? p.ink() : p.lineHigh(), 0, 0, getWidth(), getHeight(), Draw.CUT_MD);
             Icons.colored(n == 0 ? "check" : icon, 16, () -> c).paintIcon(this, g2, getWidth() - 30, 14);
-            g2.setFont(Fonts.bold(32));
-            g2.setColor(n == 0 ? p.dim() : p.ink());
-            g2.drawString(String.valueOf(n), 14, 56);
+            g2.setFont(Fonts.thin(40));
+            g2.setColor(n == 0 ? p.muted() : p.ink());
+            g2.drawString(String.valueOf(n), 14, 58);
             g2.setFont(Draw.label().deriveFont(10f));
             g2.setColor(p.muted());
             g2.drawString(label.toUpperCase(), 14, getHeight() - 14);
-            if (isFocusOwner()) Draw.focusRing(g2, 0, 0, getWidth(), getHeight(), 6);
             g2.dispose();
         }
     }
@@ -255,7 +247,7 @@ public class HealthView extends JPanel {
                 FontMetrics fm = g2.getFontMetrics();
                 g2.setColor(p.dim());
                 g2.drawString(levels[i].label(), 0, Draw.baseline(fm, y, 22));
-                g2.setColor(p.line1());
+                g2.setColor(p.lineHigh());
                 g2.fillRect(barX, y + 6, barW, 10);
                 if (total > 0 && counts[i] > 0) {
                     g2.setColor(Draw.strengthColor(levels[i]));
@@ -289,16 +281,16 @@ public class HealthView extends JPanel {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = Draw.quality(g);
             Palette p = Draw.p();
-            g2.setFont(Fonts.bold(22));
+            g2.setFont(Fonts.thin(26));
             g2.setColor(p.ink());
             g2.drawString(with + " de " + total, 0, 22);
             g2.setFont(Fonts.regular(12));
             g2.setColor(p.muted());
-            g2.drawString("entradas con código de un solo uso", g2.getFontMetrics(Fonts.bold(22)).stringWidth(with + " de " + total) + 12, 22);
-            g2.setColor(p.line1());
+            g2.drawString("entradas con código de un solo uso", g2.getFontMetrics(Fonts.thin(26)).stringWidth(with + " de " + total) + 14, 22);
+            g2.setColor(p.lineHigh());
             g2.fillRect(0, 36, getWidth(), 10);
             if (total > 0 && with > 0) {
-                g2.setColor(p.secondary());
+                g2.setColor(p.ink());
                 g2.fillRect(0, 36, Math.max(3, (int) Math.round(getWidth() * with / (double) total)), 10);
             }
             g2.dispose();
@@ -371,8 +363,8 @@ public class HealthView extends JPanel {
             Palette p = Draw.p();
             if (items.isEmpty()) {
                 g2.setFont(Fonts.regular(13));
-                g2.setColor(p.ok());
-                Icons.colored("check", 16, () -> Draw.p().ok()).paintIcon(this, g2, 0, 14);
+                g2.setColor(p.ink());
+                Icons.ink("check", 16).paintIcon(this, g2, 0, 14);
                 g2.drawString(r != null && r.total() == 0 ? "Sin entradas todavía." : "Nada urgente: todo en orden.", 26, 27);
                 g2.dispose();
                 return;
@@ -381,31 +373,32 @@ public class HealthView extends JPanel {
                 PasswordEntry e = items.get(i);
                 VaultHealth.EntryHealth h = r.of(e);
                 int y = i * 52;
-                if (i == hover) Draw.fillBox(g2, p.high(), -6, y, getWidth() + 12, 50, Draw.RADIUS);
+                if (i == hover) Draw.box(g2, p.high(), p.ink(), -6, y, getWidth() + 12, 50, 0);
                 new Icons.Avatar(e.getTitle(), e.getUrl(), 32).paintIcon(this, g2, 0, y + 9);
                 g2.setFont(Fonts.bold(13));
                 FontMetrics fm = g2.getFontMetrics();
                 g2.setColor(p.ink());
                 int right = getWidth();
                 int cx = right;
-                List<String> tags = new ArrayList<>();
-                List<Color> cols = new ArrayList<>();
-                if (h.has(VaultHealth.Flag.EMPTY)) { tags.add("Vacía"); cols.add(p.error()); }
-                if (h.has(VaultHealth.Flag.WEAK)) { tags.add("Débil"); cols.add(p.error()); }
-                if (h.has(VaultHealth.Flag.REUSED)) { tags.add("Repetida"); cols.add(p.warn()); }
-                if (h.has(VaultHealth.Flag.OLD)) { tags.add("Antigua"); cols.add(p.muted()); }
+                List<Chips.Spec> tags = new ArrayList<>();
+                if (h.has(VaultHealth.Flag.EMPTY)) tags.add(Chips.Spec.error("Vacía"));
+                if (h.has(VaultHealth.Flag.WEAK)) tags.add(Chips.Spec.error("Débil"));
+                if (h.has(VaultHealth.Flag.REUSED)) tags.add(Chips.Spec.warn("Repetida"));
+                if (h.has(VaultHealth.Flag.OLD)) tags.add(Chips.Spec.plain("Antigua", p.muted()));
                 for (int t = tags.size() - 1; t >= 0; t--) {
-                    int cw = Draw.chipWidth(g2, tags.get(t));
+                    Chips.Spec s = tags.get(t);
+                    int cw = Draw.chipWidth(g2, s.text());
                     cx -= cw;
-                    Draw.chip(g2, tags.get(t), cx, y + 16, cols.get(t), cols.get(t), null);
+                    Draw.chip(g2, s.text(), cx, y + 16, s.fg(), s.border(), s.fill());
                     cx -= 6;
                 }
                 g2.setFont(Fonts.bold(13));
+                g2.setColor(p.ink());
                 g2.drawString(Draw.ellipsize(e.getTitle() == null ? "" : e.getTitle(), fm, Math.max(40, cx - 52)), 44, y + 24);
-                g2.setFont(Fonts.regular(11));
+                g2.setFont(Fonts.mono(11));
                 g2.setColor(p.muted());
                 g2.drawString(Draw.ellipsize(Sites.domain(e.getUrl()), g2.getFontMetrics(), Math.max(40, cx - 52)), 44, y + 40);
-                g2.setColor(p.line1());
+                g2.setColor(p.lineHigh());
                 g2.fillRect(0, y + 51, getWidth(), 1);
             }
             g2.dispose();

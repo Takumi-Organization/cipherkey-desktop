@@ -71,7 +71,7 @@ public class Sidebar extends JPanel {
         JPanel bottom = new JPanel(new GridLayout(0, 1, 0, 2));
         bottom.setOpaque(false);
         bottom.setBorder(BorderFactory.createEmptyBorder(8, 10, 0, 10));
-        bottom.add(footer("Ajustes", "sliders", "Tema, acento, bloqueo y clave maestra", onSettings));
+        bottom.add(footer("Ajustes", "sliders", "Tema, bloqueo y clave maestra", onSettings));
         bottom.add(footer("Bloquear bóveda", "lock", "Bloquear (Ctrl+L)", onLock));
 
         add(new Brand(), BorderLayout.NORTH);
@@ -103,7 +103,7 @@ public class Sidebar extends JPanel {
     @Override
     protected void paintChildren(Graphics g) {
         super.paintChildren(g);
-        g.setColor(Draw.p().line1());
+        g.setColor(Draw.p().lineHigh());
         g.fillRect(getWidth() - 1, 0, 1, getHeight());
     }
 
@@ -175,7 +175,7 @@ public class Sidebar extends JPanel {
                 .map(o -> ((View) o).label()).toList();
     }
 
-    /** Marca de la aplicación: bloque de acento con el candado y el nombre. */
+    /** Marca de la aplicación: la marca de Takumi y el nombre. */
     private static final class Brand extends JComponent {
         Brand() {
             setPreferredSize(new Dimension(0, 76));
@@ -185,14 +185,13 @@ public class Sidebar extends JPanel {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = Draw.quality(g);
             Palette p = Draw.p();
-            Draw.fillBox(g2, p.accent(), 18, 22, 34, 34, Draw.RADIUS);
-            Icons.onAccent("lock", 18).paintIcon(this, g2, 26, 30);
+            Art.mark(g2, 18, 20, 38);
             g2.setColor(p.ink());
-            g2.setFont(Fonts.bold(17));
-            g2.drawString("CipherKey", 64, 38);
+            g2.setFont(Draw.tracked(Fonts.thin(19), 0.14f));
+            g2.drawString("CIPHERKEY", 68, 40);
             g2.setColor(p.muted());
             g2.setFont(Draw.label().deriveFont(10f));
-            g2.drawString("BÓVEDA LOCAL", 64, 53);
+            g2.drawString("BÓVEDA LOCAL", 68, 55);
             g2.dispose();
         }
     }
@@ -229,43 +228,44 @@ public class Sidebar extends JPanel {
             }
             View v = (View) value;
             int x0 = 10, bw = w - 20;
+            // vista activa = inversión (fondo tinta, texto fondo)
+            Color text = selected ? p.onFill() : p.dim();
             if (selected) {
-                Draw.fillBox(g2, p.high(), x0, 1, bw, h - 2, Draw.RADIUS);
-                g2.setColor(p.accent());
-                g2.fillRect(x0, 5, 3, h - 10);
-                if (focused) Draw.focusRing(g2, x0 - 1, 0, bw + 2, h, 6);
+                Draw.fillBox(g2, p.fill(), x0, 1, bw, h - 2, 0);
+                if (focused) Draw.focusRing(g2, x0, 1, bw, h - 2, 0, p.onFill());
             }
             int x = x0 + 14;
             if (v.dot() != null) {
-                Draw.fillBox(g2, v.dot(), x + 2, (h - 10) / 2, 10, 10, 4);
+                Draw.box(g2, selected ? p.onFill() : Icons.Avatar.colorFor(v.label().toLowerCase()), null, x + 2, (h - 10) / 2, 10, 10, 0);
             } else if (v.icon() != null) {
-                v.icon().paintIcon(this, g2, x, (h - v.icon().getIconHeight()) / 2);
+                Icons.withColor(selected ? p.onFill() : null, () -> v.icon().paintIcon(this, g2, x, (h - v.icon().getIconHeight()) / 2));
             }
             g2.setFont(selected ? Fonts.bold(13) : Fonts.regular(13));
             FontMetrics fm = g2.getFontMetrics();
-            g2.setColor(selected ? p.ink() : p.dim());
+            g2.setColor(text);
 
             int right = x0 + bw - 12;
             String count = v.badge() != null ? v.badge() : v.count() >= 0 ? String.valueOf(v.count()) : "";
             if (!count.isEmpty()) {
                 if (v.badge() != null) {
-                    g2.setFont(Fonts.bold(11));
+                    g2.setFont(Fonts.monoBold(11));
                     int cw = g2.getFontMetrics().stringWidth(count) + 12;
-                    Draw.box(g2, selected ? p.accent() : null, selected ? null : p.line2(), right - cw, (h - 20) / 2, cw, 20, 12);
-                    g2.setColor(selected ? p.onAccent() : p.ink());
+                    Draw.box(g2, null, selected ? p.onFill() : p.lineHigh(), right - cw, (h - 20) / 2, cw, 20, 0);
+                    g2.setColor(selected ? p.onFill() : p.ink());
                     Draw.centeredText(g2, count, right - cw, (h - 20) / 2, cw, 20);
                     right -= cw + 6;
                 } else {
-                    g2.setFont(Fonts.regular(12));
+                    // avisos pendientes: «▲ n» en negrita (el aviso no depende del color)
+                    String shown = v.alert() ? Draw.G_WARN + " " + count : count;
+                    g2.setFont(v.alert() ? Fonts.monoBold(12) : Fonts.mono(12));
                     FontMetrics cf = g2.getFontMetrics();
-                    int cw = cf.stringWidth(count);
-                    g2.setColor(v.alert() ? p.error() : p.muted());
-                    if (v.alert()) g2.setFont(Fonts.bold(12));
-                    g2.drawString(count, right - cw, Draw.baseline(cf, 0, h));
+                    int cw = cf.stringWidth(shown);
+                    g2.setColor(selected ? p.onFill() : v.alert() ? p.ink() : p.muted());
+                    g2.drawString(shown, right - cw, Draw.baseline(cf, 0, h));
                     right -= cw + 6;
                 }
                 g2.setFont(selected ? Fonts.bold(13) : Fonts.regular(13));
-                g2.setColor(selected ? p.ink() : p.dim());
+                g2.setColor(text);
             }
             int tx = x + 28;
             g2.drawString(Draw.ellipsize(v.label(), fm, right - tx - 4), tx, Draw.baseline(fm, 0, h));

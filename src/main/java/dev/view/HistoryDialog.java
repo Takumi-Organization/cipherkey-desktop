@@ -31,7 +31,7 @@ public class HistoryDialog extends JDialog {
         scroll.setBorder(null);
         scroll.setPreferredSize(new Dimension(420, Math.min(280, 28 + entry.getHistory().size() * 62)));
 
-        JButton close = new JButton("Cerrar");
+        JButton close = Ui.secondary("Cerrar");
         close.addActionListener(e -> dispose());
         getRootPane().setDefaultButton(close);
 
