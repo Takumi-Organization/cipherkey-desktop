@@ -60,3 +60,6 @@ keystore.properties
 node_modules/
 *.class
 hs_err_pid*
+
+# Excepción: bóvedas de prueba versionadas
+!**/src/test/resources/fixtures/*.ckey
