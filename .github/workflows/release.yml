@@ -1,10 +1,13 @@
 name: Release
 
-# Al subir una etiqueta vX.Y.Z se construyen los paquetes de cada sistema y se publica una release.
-#   git tag v4.0.0 && git push origin v4.0.0
+# Construye los paquetes de Linux, Windows y macOS de una etiqueta ya existente y los añade a su release
+# (la crea si no existe). Se lanza a mano desde la pestaña Actions indicando la etiqueta, p. ej. v4.2.0.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta a construir (vX.Y.Z)'
+        required: true
 
 permissions:
   contents: write
@@ -25,6 +28,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-java@v4
         with:
@@ -34,7 +39,8 @@ jobs:
 
       - name: Comprobar que la etiqueta coincide con el pom
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
           POM_VERSION="$(mvn -q -B -DforceStdout help:evaluate -Dexpression=project.version)"
           if [ "$VERSION" != "$POM_VERSION" ]; then
             echo "La etiqueta ($VERSION) no coincide con la versión del pom ($POM_VERSION)"; exit 1
@@ -81,8 +87,14 @@ jobs:
         working-directory: release
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
 
-      - name: Crear la release
+      - name: Añadir a la release (o crearla)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --title "CipherKey ${GITHUB_REF_NAME#v}" --generate-notes
+          TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --title "CipherKey ${TAG#v}" --generate-notes
+          fi
