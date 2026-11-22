@@ -40,3 +40,23 @@ build/
 .idea/
 dependency-reduced-pom.xml
 release/
+
+### Secretos y claves (nunca se versionan) ###
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+keystore.properties
+.env
+.env.*
+
+### Artefactos y temporales ###
+*.log
+*.ckey
+*.ckey.bak
+*.bak-proximidad-*
+*.sha256
+node_modules/
+*.class
+hs_err_pid*
